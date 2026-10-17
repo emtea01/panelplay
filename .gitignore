@@ -1,0 +1,5 @@
+venv/
+work/
+config.yaml
+__pycache__/
+*.mp4

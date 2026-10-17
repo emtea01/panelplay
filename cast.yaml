@@ -1,0 +1,28 @@
+# Voice casting. Kokoro voice names: a/b = American/British, f/m = female/male.
+# British:  bm_george bm_lewis bm_daniel bm_fable | bf_emma bf_isabella bf_alice bf_lily
+# American: am_adam am_michael am_onyx am_fenrir am_puck am_echo am_eric am_liam
+#           af_heart af_bella af_nicole af_sarah af_sky
+#
+# speed: 1.0 is normal.  fx: robot | radio | none
+# Speaker names must match what Gemini returns; the reader is told to use these exact names.
+
+narrator:
+  voice: bm_fable
+  speed: 0.95
+
+characters:
+  Judge Dredd:   {voice: am_onyx,   speed: 0.92}
+  Walter:        {voice: bm_lewis,  speed: 1.0,  fx: robot}
+  Call-Me-Kenneth: {voice: am_fenrir, speed: 0.95, fx: robot}
+  Tharg:         {voice: bm_george, speed: 0.95}
+  Johnny Alpha:  {voice: bm_daniel, speed: 0.95}
+  Wulf:          {voice: bm_george, speed: 0.9}
+  Rogue Trooper: {voice: am_michael, speed: 0.95}
+
+# Anyone not listed gets a voice from these pools, picked consistently by name.
+# Assignments are saved to work/cast_assigned.yaml so you can tweak them later.
+pools:
+  male:    [am_adam, am_michael, bm_daniel, am_eric, am_liam, bm_lewis, am_puck]
+  female:  [bf_emma, af_bella, bf_isabella, af_nicole, bf_alice, af_sarah]
+  robot:   [am_echo, bm_george, am_eric]
+  unknown: [am_adam, bm_lewis, am_liam]

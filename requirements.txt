@@ -1,0 +1,9 @@
+# Install CPU-only PyTorch first (saves ~2 GB of CUDA downloads):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+kokoro>=0.9.4
+google-genai>=1.0
+pydantic>=2
+pyyaml
+pillow
+numpy
+requests

@@ -1,0 +1,45 @@
+# Copy to config.yaml and edit.
+
+# Where the comics come from: "komga" (via its API) or "folder" (read CBZ files directly,
+# e.g. from the NFS share you already bind-mount into the Komga container).
+source: komga
+
+komga:
+  url: http://komga.lan:25600
+  # Either an API key (Komga user settings -> API keys) ...
+  api_key: ""
+  # ... or a username/password.
+  user: ""
+  password: ""
+  # Name of the series that holds the progs, as shown in Komga.
+  series: "2000 AD"
+
+folder:
+  path: /mnt/comics/2000AD
+  # Optional regex with one group capturing the prog number from the file name.
+  # Leave empty to auto-detect ("2000AD Prog 0123.cbz", "2000 AD 123.cbz" etc.).
+  prog_regex: ''
+
+gemini:
+  # Free key from https://aistudio.google.com  (or set GEMINI_API_KEY in the environment)
+  api_key: ""
+  # Cheap model for "which pages are this strip?" and a stronger one for reading the dialogue.
+  # The *-latest aliases follow Google's current Flash models; pin a specific name if one breaks.
+  tag_model: gemini-flash-lite-latest
+  read_model: gemini-flash-latest
+  # Stay under the free-tier per-minute limit.
+  requests_per_minute: 8
+
+tts:
+  engine: kokoro     # "kokoro" (real voices, CPU) or "fake" (tones, for testing the render)
+
+render:
+  width: 1920
+  height: 1080
+  fps: 25
+  motion: true       # slow Ken Burns zoom on each panel (set false for faster renders)
+  read_sfx: false    # read "KRAKK!" style sound effects aloud via the narrator
+
+paths:
+  work: ./work                     # cached page scripts, audio and segments
+  plex: /mnt/media/2000AD Narrated # a Plex TV library folder
