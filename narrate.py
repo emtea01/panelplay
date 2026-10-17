@@ -51,7 +51,7 @@ def main():
     ap.add_argument("--tts", choices=["kokoro", "fake"], help="override tts.engine from config")
     args = ap.parse_args()
 
-    cfg = yaml.safe_load(Path(args.config).read_text())
+    cfg = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     work = Path(cfg["paths"]["work"]).expanduser()
     if not work.is_absolute():
         work = HERE / work
@@ -99,8 +99,8 @@ def main():
             print(f"  finding '{args.strip}' in {n} pages")
             thumbs = [source.thumbnail(book_(), i) for i in range(1, n + 1)]
             tag = get_reader().tag_pages(thumbs, args.strip, args.arc).model_dump()
-            tag_file.write_text(json.dumps(tag, indent=2))
-        tag = json.loads(tag_file.read_text())
+            tag_file.write_text(json.dumps(tag, indent=2), encoding="utf-8")
+        tag = json.loads(tag_file.read_text(encoding="utf-8"))
         pages = tag["pages"]
         if not pages:
             print(f"  '{args.strip}' not found in this prog; edit {tag_file} if that's wrong")
@@ -117,7 +117,7 @@ def main():
             print(f"  reading page {pg}")
             img, mime = source.page(book_(), pg)
             script = get_reader().read_page(img, mime, args.strip, args.arc, cast.names)
-            sfile.write_text(json.dumps(script.model_dump(), indent=2, ensure_ascii=False))
+            sfile.write_text(json.dumps(script.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
         if args.stage == "read":
             continue
 
@@ -127,7 +127,7 @@ def main():
             continue
 
         # 3. Render.
-        scripts = [json.loads((pdir / f"page_{pg:03d}.json").read_text()) for pg in pages]
+        scripts = [json.loads((pdir / f"page_{pg:03d}.json").read_text(encoding="utf-8")) for pg in pages]
         _write_transcript(pdir / "transcript.txt", scripts)
         images = [load_image(source.page(book_(), pg)[0]) for pg in pages]
 
@@ -164,7 +164,7 @@ def _write_transcript(path: Path, scripts):
                     who = "SFX"
                 lines.append(f"{who}: {ln['text']}")
         lines.append("")
-    path.write_text("\n".join(lines))
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 if __name__ == "__main__":

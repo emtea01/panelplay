@@ -12,7 +12,7 @@ DELIVERY_GAIN = {"normal": 1.0, "shout": 1.15, "whisper": 0.7, "radio": 0.95}
 
 class Cast:
     def __init__(self, cast_file: Path, assigned_file: Path):
-        data = yaml.safe_load(cast_file.read_text())
+        data = yaml.safe_load(cast_file.read_text(encoding="utf-8"))
         self.narrator = data["narrator"]
         self.characters = {k.lower(): v for k, v in (data.get("characters") or {}).items()}
         self.names = list((data.get("characters") or {}).keys())
@@ -20,7 +20,7 @@ class Cast:
         self.assigned_file = assigned_file
         self.assigned = {}
         if assigned_file.exists():
-            self.assigned = {k.lower(): v for k, v in (yaml.safe_load(assigned_file.read_text()) or {}).items()}
+            self.assigned = {k.lower(): v for k, v in (yaml.safe_load(assigned_file.read_text(encoding="utf-8")) or {}).items()}
 
     def voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
         if kind == "caption" or speaker.lower() in ("narrator", "caption"):
@@ -43,7 +43,8 @@ class Cast:
         self.assigned_file.write_text(
             "# Voices picked automatically for characters not in cast.yaml. Edit freely,\n"
             "# or move a character into cast.yaml to make it permanent.\n"
-            + yaml.safe_dump(self.assigned, sort_keys=True)
+            + yaml.safe_dump(self.assigned, sort_keys=True),
+            encoding="utf-8",
         )
 
 

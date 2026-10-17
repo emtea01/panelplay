@@ -18,7 +18,8 @@ PAGE_INTRO = 1.6     # full-page look before its panels
 
 def _font(size):
     for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-              "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"):
+              "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+              "C:/Windows/Fonts/arialbd.ttf"):
         if Path(f).exists():
             return ImageFont.truetype(f, size)
     return ImageFont.load_default()
@@ -156,7 +157,7 @@ class Renderer:
         print()
 
         lst = seg_dir / "list.txt"
-        lst.write_text("".join(f"file '{p.resolve()}'\n" for p in segs))
+        lst.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in segs), encoding="utf-8")
         out_file.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
                         "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(out_file)], check=True)
