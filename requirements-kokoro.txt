@@ -1,0 +1,5 @@
+# Optional local voices (Kokoro). Install CPU-only PyTorch first, to skip ~2 GB of CUDA downloads:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-kokoro.txt
+# Needs Python 3.12 or older, and espeak-ng on Linux.
+kokoro>=0.9.4

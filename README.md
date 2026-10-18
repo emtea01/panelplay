@@ -11,23 +11,20 @@ Komga / CBZ ──► Gemini Flash (free tier) ──► page scripts (JSON) ─
 
 No GPU needed. Gemini does the reading in the cloud on the free tier; Kokoro and ffmpeg run on CPU.
 
-## 1. Container
+## 1. Install
 
-A Debian 12 LXC with 4 cores and 4–6 GB RAM is plenty. Bind-mount:
-- the Plex library folder you want episodes written to (read-write)
-- optionally the 2000 AD CBZ folder (read-only) if you'd rather skip Komga's API
+On Proxmox, use the one-line installer (see **Proxmox** below). By hand, on Debian or Windows:
 
 ```bash
-apt update && apt install -y python3-venv ffmpeg espeak-ng fonts-dejavu-core
-cd /opt && # copy this folder here
-cd narrate2000ad
+apt update && apt install -y python3-venv ffmpeg fonts-dejavu-core
 python3 -m venv venv && . venv/bin/activate
-pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch, ~200 MB instead of ~2 GB
 pip install -r requirements.txt
 cp config.example.yaml config.yaml   # then edit it
 ```
 
-The first real run downloads the Kokoro model (~330 MB) from Hugging Face once.
+For the optional local Kokoro voices, also `apt install espeak-ng`, install CPU-only PyTorch and
+`pip install -r requirements-kokoro.txt` (Python 3.12 or older). The first Kokoro run downloads its
+model (~330 MB) once. ElevenLabs needs none of this.
 
 ## 2. Config
 
@@ -114,3 +111,42 @@ the database, and the portal has no login, so keep it on your LAN.
 Plex seasons are years of publication (1977 is season 1), holding every episode of the strip that year in prog
 order, one-offs and multi-part stories together: Robot Wars part 1 (prog 10) is Judge Dredd s01e09. Set a season
 by hand on a story's page to give that story a season of its own.
+
+## Proxmox
+
+`deploy/proxmox-install.sh` creates an unprivileged Debian 12 LXC (4 cores, 2 GB RAM + 1 GB swap,
+16 GB disk; 4 GB and 24 GB with Kokoro), bind-mounts the comics read-only at `/mnt/comics` and the Plex
+folder read-write at `/mnt/plex`, installs PanelPlay from this repo and starts it on port 8077.
+
+**1. Mount the NAS shares on the Proxmox host.** The container runs PanelPlay as uid 1000, which is
+uid **101000** on the host, so the Plex share must be writable by 101000. For SMB (add to `/etc/fstab`
+to survive reboots):
+
+```bash
+apt-get install -y cifs-utils
+mkdir -p /mnt/pve/comics /mnt/pve/anime
+mount -t cifs //NAS/Library/Comics /mnt/pve/comics -o ro,username=USER,password=PASS,uid=101000,gid=101000
+mount -t cifs //NAS/Anime          /mnt/pve/anime  -o username=USER,password=PASS,uid=101000,gid=101000,file_mode=0664,dir_mode=0775
+```
+
+For NFS, mount as usual and make sure the export lets uid 101000 write to the Plex folder.
+
+**2. Run the installer on the host** (as root, e.g. in the Proxmox web Shell):
+
+```bash
+COMICS_PATH=/mnt/pve/comics PLEX_PATH=/mnt/pve/anime \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/emtea01/panelplay/master/deploy/proxmox-install.sh)"
+```
+
+If the comics folder holds a `2000 AD (1977)` folder, the portal is pointed straight at it. Use
+`COMICS_PATH=none` to read from Komga instead. Other options (`CTID`, `CORES`, `MEMORY_MB`, `DISK_GB`,
+`STORAGE`, `BRIDGE`, `INSTALL_KOKORO=1`) are at the top of the script. It prints the portal's address and
+the container's root password.
+
+**3. In the portal:** add the Gemini and ElevenLabs keys in Settings, then Import story index.
+
+**Updating:** `pct exec <CTID> -- bash /opt/panelplay/deploy/redeploy.sh` pulls the latest code and
+restarts (a render in progress is stopped and can be queued again). Everything stateful lives in
+`/var/lib/panelplay` in the container: the database, the index PDFs and `work/` (Gemini's readings and
+the ElevenLabs voice cache, which is worth keeping: it's what makes re-renders free). To carry over
+readings and voices already made on another machine, copy its `work/` folder there.

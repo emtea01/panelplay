@@ -70,7 +70,8 @@ def current(db) -> dict:
 
 
 def seed_from_dev_setup(db):
-    """First run on a machine that already used the command-line renderer: borrow its config.yaml and keys."""
+    """First run: borrow the command-line renderer's config.yaml if there is one, and keys and folders from
+    the environment (the container's /etc/panelplay.env sets the folders)."""
     if db.get_settings():
         return
     seed = {}
@@ -87,7 +88,8 @@ def seed_from_dev_setup(db):
             seed["work_path"] = str(w if w.is_absolute() else (ROOT / w).resolve())
         seed["source"] = cfg.get("source", "folder")
     for env, key in (("GEMINI_API_KEY", "gemini_api_key"), ("ELEVENLABS_API_KEY", "elevenlabs_api_key"),
-                     ("COMICVINE_API_KEY", "comicvine_api_key")):
+                     ("COMICVINE_API_KEY", "comicvine_api_key"),
+                     ("PANELPLAY_COMICS_PATH", "comics_path"), ("PANELPLAY_OUTPUT_PATH", "output_path")):
         if os.environ.get(env):
             seed[key] = os.environ[env]
     db.set_settings(seed or {"source": "folder"})
