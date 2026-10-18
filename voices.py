@@ -82,6 +82,11 @@ def apply_fx(audio: np.ndarray, fx: str) -> np.ndarray:
         # Ring modulation: the classic tin-can robot voice, half mixed with the dry voice.
         t = np.arange(len(audio)) / SR
         return (0.45 * audio + 0.75 * audio * np.sin(2 * np.pi * 45 * t)).astype(np.float32)
+    if fx == "gravel":
+        # Soft saturation plus a little rasp: a rougher, more worn-in voice.
+        rasp = np.random.default_rng(0).standard_normal(len(audio)).astype(np.float32)
+        rough = np.tanh(audio * 3.0) / np.tanh(3.0) + 0.04 * rasp * np.abs(audio)
+        return (0.6 * rough + 0.4 * audio).astype(np.float32)
     if fx == "radio":
         # Crude telephone band-pass using FFT masking.
         spec = np.fft.rfft(audio)
@@ -100,7 +105,11 @@ def speak_line(tts, cast: Cast, line: dict) -> np.ndarray:
     v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"])
     delivery = line.get("delivery", "normal")
     speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(delivery, 1.0)
-    audio = tts.say(line["text"], v["voice"], speed)
+    # pitch (semitones): speak faster by k, then stretch back by k -> same pace, lower pitch.
+    k = 2 ** (-float(v.get("pitch", 0)) / 12)
+    audio = tts.say(line["text"], v["voice"], speed * k)
+    if k != 1:
+        audio = np.interp(np.arange(0, len(audio), 1 / k), np.arange(len(audio)), audio).astype(np.float32)
     fx = v.get("fx") or ("radio" if delivery == "radio" else None)
     if fx:
         audio = apply_fx(audio, fx)
