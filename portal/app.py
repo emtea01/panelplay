@@ -387,7 +387,13 @@ def test_setting(what: str):
         elif what == "elevenlabs":
             r = requests.get("https://api.elevenlabs.io/v2/voices", params={"page_size": 100},
                              headers={"xi-api-key": s["elevenlabs_api_key"]}, timeout=20)
-            r.raise_for_status()
+            if not r.ok:
+                try:
+                    detail = r.json().get("detail")
+                    detail = detail.get("message") or detail.get("status") if isinstance(detail, dict) else detail
+                except ValueError:
+                    detail = r.text[:200]
+                raise RuntimeError(f"ElevenLabs HTTP {r.status_code}: {detail}")
             mine = [v["name"] for v in r.json()["voices"] if v.get("category") != "premade"]
             ok, msg = True, f"Working. {len(r.json()['voices'])} voices" + (f", yours: {', '.join(mine)}" if mine else "") + "."
         elif what == "comicvine":
