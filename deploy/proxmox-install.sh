@@ -5,12 +5,12 @@
 #
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/emtea01/panelplay/master/deploy/proxmox-install.sh)"
 #
-# It creates an unprivileged Debian 12 LXC, bind-mounts your comics (read-only) and your Plex
-# TV folder (read-write) into it, clones PanelPlay from GitHub and runs deploy/install.sh inside.
-# Mount the NAS shares on the host first (see README, "Proxmox"); this script doesn't mount them.
+# It creates an unprivileged Debian 12 LXC, clones PanelPlay from GitHub and runs deploy/install.sh inside.
+# It doesn't touch your comics or Plex folders: mount those into the container however suits you, then
+# set their paths in the portal's Settings.
 #
 # Any setting below can be given as an environment variable, e.g.
-#   COMICS_PATH=/mnt/pve/comics PLEX_PATH=/mnt/pve/anime bash -c "$(curl ...)"
+#   CORES=2 CTID=120 bash -c "$(curl ...)"
 #
 # Written against documented pct/pveam behaviour but not yet run on a real Proxmox host:
 # try it on a spare CTID first.
@@ -34,10 +34,6 @@ BRIDGE="${BRIDGE:-vmbr0}"
 TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"
 ROOT_PASSWORD="${ROOT_PASSWORD:-}"        # empty = generated, shown at the end
 PORT="${PORT:-8077}"
-
-# Paths ON THIS HOST where the NAS shares are already mounted.
-COMICS_PATH="${COMICS_PATH:-}"            # the comics library, or "none" if PanelPlay will read from Komga
-PLEX_PATH="${PLEX_PATH:-}"                # the Plex TV library folder episodes are written to
 APP_UID=1000                              # the service user inside the container; it is $((100000 + APP_UID)) on the host
 
 # ---------------------------------------------------------------------------
@@ -45,17 +41,6 @@ APP_UID=1000                              # the service user inside the containe
 # ---------------------------------------------------------------------------
 [ "$(id -u)" -eq 0 ] || { echo "!! Run this as root on the Proxmox host." >&2; exit 1; }
 command -v pct >/dev/null 2>&1 || { echo "!! 'pct' not found: this doesn't look like a Proxmox host." >&2; exit 1; }
-
-if [ -z "$COMICS_PATH" ]; then
-    read -rp "Path on this host where your comics are mounted (e.g. /mnt/pve/comics), or 'none' to use Komga: " COMICS_PATH
-fi
-if [ "$COMICS_PATH" != "none" ] && [ ! -d "$COMICS_PATH" ]; then
-    echo "!! $COMICS_PATH doesn't exist or isn't mounted. Mount the NAS share there first." >&2; exit 1
-fi
-if [ -z "$PLEX_PATH" ]; then
-    read -rp "Path on this host where your Plex TV folder is mounted (e.g. /mnt/pve/anime): " PLEX_PATH
-fi
-[ -d "$PLEX_PATH" ] || { echo "!! $PLEX_PATH doesn't exist or isn't mounted. Mount the NAS share there first." >&2; exit 1; }
 
 if [ -z "$ROOT_PASSWORD" ]; then
     ROOT_PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20 || true)"
@@ -95,19 +80,6 @@ pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" \
     --tags panelplay \
     --password "$ROOT_PASSWORD"
 
-COMICS_IN_CT=""
-if [ "$COMICS_PATH" != "none" ]; then
-    echo ">> Comics: $COMICS_PATH -> /mnt/comics (read-only)"
-    pct set "$CTID" -mp0 "${COMICS_PATH},mp=/mnt/comics,ro=1"
-    COMICS_IN_CT="/mnt/comics"
-    # Point the portal at the 2000 AD folder itself, so other titles' issue numbers don't pass for progs.
-    for d in "2000 AD (1977)" "2000 AD" "2000AD"; do
-        if [ -d "$COMICS_PATH/$d" ]; then COMICS_IN_CT="/mnt/comics/$d"; break; fi
-    done
-fi
-echo ">> Plex: $PLEX_PATH -> /mnt/plex (read-write)"
-pct set "$CTID" -mp1 "${PLEX_PATH},mp=/mnt/plex"
-
 echo ">> Starting container ..."
 pct start "$CTID"
 echo ">> Waiting for the network..."
@@ -126,8 +98,7 @@ pct exec "$CTID" -- bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractiv
 pct exec "$CTID" -- git clone --depth 1 --branch "$BRANCH" "$GITHUB_REPO" /opt/panelplay
 
 echo ">> Running deploy/install.sh inside the container ..."
-pct exec "$CTID" -- env INSTALL_KOKORO="$INSTALL_KOKORO" APP_UID="$APP_UID" PORT="$PORT" \
-    COMICS_IN_CT="$COMICS_IN_CT" OUTPUT_IN_CT=/mnt/plex bash /opt/panelplay/deploy/install.sh
+pct exec "$CTID" -- env INSTALL_KOKORO="$INSTALL_KOKORO" APP_UID="$APP_UID" PORT="$PORT" bash /opt/panelplay/deploy/install.sh
 
 CT_IP="$(pct exec "$CTID" -- hostname -I | awk '{print $1}')"
 echo ""
@@ -136,12 +107,15 @@ echo " PanelPlay is up:  http://${CT_IP}:${PORT}"
 echo "   Container:      $CTID ($CT_HOSTNAME)"
 echo "   Root password:  $ROOT_PASSWORD   (console: pct enter $CTID)"
 echo ""
-echo " Next, in the portal:"
-echo "   Settings: add the Gemini and ElevenLabs keys (Test buttons check them)."
-echo "   Story arcs: Import story index."
-echo ""
-echo " If the Plex folder test says it isn't writable, mount that share on"
-echo " this host with uid=$((100000 + APP_UID)),gid=$((100000 + APP_UID)) (see README)."
+echo " Next:"
+echo "   1. Mount your comics and Plex folders into the container, e.g. from a"
+echo "      folder already mounted on this host:"
+echo "        pct set $CTID -mp0 /path/on/host,mp=/path/in/container"
+echo "      PanelPlay runs as uid $APP_UID in the container (uid $((100000 + APP_UID)) on"
+echo "      this host): it needs to read the comics and write to the Plex folder."
+echo "   2. In the portal's Settings, set both folders and add the Gemini and"
+echo "      ElevenLabs keys (the Test buttons check each one)."
+echo "   3. Story arcs: Import story index."
 echo ""
 echo " Update later with:  pct exec $CTID -- bash /opt/panelplay/deploy/redeploy.sh"
 echo "======================================================================"

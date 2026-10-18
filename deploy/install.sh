@@ -3,7 +3,8 @@
 # (proxmox-install.sh does this for you). Safe to run again.
 #
 #   INSTALL_KOKORO=1   also install the local Kokoro voices (CPU PyTorch, ~2 GB); ElevenLabs needs neither
-#   COMICS_IN_CT / OUTPUT_IN_CT   comics and Plex folders as seen inside the container, used on first start
+#
+# The comics and Plex folders aren't part of the install: mount them anywhere and set them in Settings.
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,14 +37,8 @@ if [ "$INSTALL_KOKORO" = "1" ]; then
     "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements-kokoro.txt"
 fi
 
-# Folders the portal starts with (first start only; change them later in Settings).
 if [ ! -f /etc/panelplay.env ]; then
-    {
-        echo "# Read by panelplay.service. The paths only seed the portal's settings on its first start."
-        [ -n "${COMICS_IN_CT:-}" ] && echo "PANELPLAY_COMICS_PATH=${COMICS_IN_CT}"
-        [ -n "${OUTPUT_IN_CT:-}" ] && echo "PANELPLAY_OUTPUT_PATH=${OUTPUT_IN_CT}"
-        echo "PANELPLAY_PORT=${PORT}"
-    } > /etc/panelplay.env
+    printf '# Read by panelplay.service.\nPANELPLAY_PORT=%s\n' "$PORT" > /etc/panelplay.env
 fi
 
 echo ">> systemd service..."
@@ -60,14 +55,5 @@ done
 if ! curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/arcs"; then
     echo "!! The portal didn't answer. Check: journalctl -u panelplay -n 50" >&2
     exit 1
-fi
-
-if [ -n "${OUTPUT_IN_CT:-}" ] && [ -d "$OUTPUT_IN_CT" ]; then
-    if runuser -u panelplay -- sh -c "touch '$OUTPUT_IN_CT/.panelplay-test' && rm '$OUTPUT_IN_CT/.panelplay-test'" 2>/dev/null; then
-        echo ">> $OUTPUT_IN_CT is writable."
-    else
-        echo "!! The service user can't write to $OUTPUT_IN_CT. On the Proxmox host, mount that share"
-        echo "!! with uid=$((100000 + APP_UID)),gid=$((100000 + APP_UID)) (see README, Proxmox)."
-    fi
 fi
 echo ">> Done: http://$(hostname -I | awk '{print $1}'):${PORT}"

@@ -115,35 +115,37 @@ by hand on a story's page to give that story a season of its own.
 ## Proxmox
 
 `deploy/proxmox-install.sh` creates an unprivileged Debian 12 LXC (4 cores, 2 GB RAM + 1 GB swap,
-16 GB disk; 4 GB and 24 GB with Kokoro), bind-mounts the comics read-only at `/mnt/comics` and the Plex
-folder read-write at `/mnt/plex`, installs PanelPlay from this repo and starts it on port 8077.
+16 GB disk; 4 GB and 24 GB with Kokoro), installs PanelPlay from this repo and starts it on port 8077.
+It doesn't set up any comics or Plex folders: those are yours to mount, and you point PanelPlay at them
+in Settings.
 
-**1. Mount the NAS shares on the Proxmox host.** The container runs PanelPlay as uid 1000, which is
-uid **101000** on the host, so the Plex share must be writable by 101000. For SMB (add to `/etc/fstab`
-to survive reboots):
-
-```bash
-apt-get install -y cifs-utils
-mkdir -p /mnt/pve/comics /mnt/pve/anime
-mount -t cifs //NAS/Library/Comics /mnt/pve/comics -o ro,username=USER,password=PASS,uid=101000,gid=101000
-mount -t cifs //NAS/Anime          /mnt/pve/anime  -o username=USER,password=PASS,uid=101000,gid=101000,file_mode=0664,dir_mode=0775
-```
-
-For NFS, mount as usual and make sure the export lets uid 101000 write to the Plex folder.
-
-**2. Run the installer on the host** (as root, e.g. in the Proxmox web Shell):
+**1. Run the installer on the Proxmox host** (as root, e.g. in the web Shell):
 
 ```bash
-COMICS_PATH=/mnt/pve/comics PLEX_PATH=/mnt/pve/anime \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/emtea01/panelplay/master/deploy/proxmox-install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/emtea01/panelplay/master/deploy/proxmox-install.sh)"
 ```
 
-If the comics folder holds a `2000 AD (1977)` folder, the portal is pointed straight at it. Use
-`COMICS_PATH=none` to read from Komga instead. Other options (`CTID`, `CORES`, `MEMORY_MB`, `DISK_GB`,
-`STORAGE`, `BRIDGE`, `INSTALL_KOKORO=1`) are at the top of the script. It prints the portal's address and
-the container's root password.
+Options (`CTID`, `CORES`, `MEMORY_MB`, `DISK_GB`, `STORAGE`, `BRIDGE`, `INSTALL_KOKORO=1`) go in front as
+environment variables and are listed at the top of the script. It prints the portal's address and the
+container's root password.
 
-**3. In the portal:** add the Gemini and ElevenLabs keys in Settings, then Import story index.
+**2. Mount your folders into the container**, wherever suits you. For a share already mounted on the
+host, a bind mount is simplest (restart the container afterwards):
+
+```bash
+pct set <CTID> -mp0 /mnt/pve/comics,mp=/mnt/comics,ro=1
+pct set <CTID> -mp1 /mnt/pve/anime,mp=/mnt/plex
+```
+
+PanelPlay runs as uid 1000 inside the container, which is uid **101000** on the host: it needs to read
+the comics and write to the Plex folder. For an SMB share mounted on the host, that means mounting it
+with `uid=101000,gid=101000`.
+
+Not using a folder for the comics? Komga works too (Settings → Library).
+
+**3. In the portal's Settings**, set the comics folder (the one holding the progs, e.g.
+`/mnt/comics/2000 AD (1977)`) and the Plex folder, add the Gemini and ElevenLabs keys, and use the Test
+buttons. Then Story arcs → Import story index.
 
 **Updating:** `pct exec <CTID> -- bash /opt/panelplay/deploy/redeploy.sh` pulls the latest code and
 restarts (a render in progress is stopped and can be queued again). Everything stateful lives in

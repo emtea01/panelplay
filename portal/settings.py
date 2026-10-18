@@ -71,7 +71,7 @@ def current(db) -> dict:
 
 def seed_from_dev_setup(db):
     """First run: borrow the command-line renderer's config.yaml if there is one, and keys and folders from
-    the environment (the container's /etc/panelplay.env sets the folders)."""
+    the environment (PANELPLAY_COMICS_PATH / PANELPLAY_OUTPUT_PATH, optional)."""
     if db.get_settings():
         return
     seed = {}

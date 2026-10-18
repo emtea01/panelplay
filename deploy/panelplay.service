@@ -1,8 +1,7 @@
 [Unit]
 Description=PanelPlay - 2000 AD story arcs as narrated Plex episodes
-After=network-online.target
+After=network-online.target remote-fs.target
 Wants=network-online.target
-RequiresMountsFor=/mnt/plex
 
 [Service]
 Type=simple
@@ -20,11 +19,11 @@ ExecStart=/opt/panelplay/venv/bin/python -m portal
 Restart=on-failure
 RestartSec=5
 
-# The code and comics stay read-only; only the data folder and the Plex folder are writable.
+# /usr, /boot and /etc are read-only. The comics and Plex folders can be mounted anywhere else,
+# so the rest is left to ordinary file permissions.
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=/var/lib/panelplay /mnt/plex
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target
