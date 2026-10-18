@@ -91,6 +91,8 @@ class Runner:
                 pdir = arc_dir / f"prog_{p:04d}"
                 for f in [pdir / "tag.json", *pdir.glob("page_*.json")]:
                     f.unlink(missing_ok=True)
+        else:
+            _pages_from_contents(s, series, arc, progs, arc_dir)
 
         run_dir = S.data_dir() / "runs"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -162,3 +164,23 @@ def _error_from(tail: list[str]) -> str:
         if t and not t.startswith(("File ", "Traceback", "^", "~")):
             return t[:500]
     return ""
+
+
+def _pages_from_contents(s, series, arc, progs, arc_dir):
+    """If Gemini already listed an issue's contents while finding stories, take the story's pages from there
+    instead of asking again."""
+    from .indexer import _norm, canonical_strip, contents_dir
+
+    cdir = contents_dir(s["work_path"], series)
+    for p in progs:
+        tag, f = arc_dir / f"prog_{p:04d}" / "tag.json", cdir / f"issue_{p:04d}.json"
+        if tag.exists() or not f.exists():
+            continue
+        stories = json.loads(f.read_text(encoding="utf-8"))["stories"]
+        mine = [st for st in stories if _norm(canonical_strip(st["strip"], [arc["strip"]])) == _norm(arc["strip"])]
+        titled = [st for st in mine if _norm(st.get("title") or "") == _norm(arc["title"])]
+        pick = (titled or mine)[:1]
+        if pick and len(titled or mine) == 1:
+            tag.parent.mkdir(parents=True, exist_ok=True)
+            tag.write_text(json.dumps({"pages": pick[0]["pages"], "episode_title": None, "part": pick[0].get("part")},
+                                      indent=2), encoding="utf-8")

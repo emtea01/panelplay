@@ -30,6 +30,25 @@ class PageScript(BaseModel):
     panels: list[Panel]
 
 
+class Story(BaseModel):
+    strip: str = Field(description="The strip's name, as its title logo shows it (e.g. 'Judge Dredd')")
+    title: Optional[str] = Field(None, description="This story's own title, if one is printed (e.g. 'The Cursed Earth')")
+    part: Optional[int] = Field(None, description="Part or episode number if printed (e.g. 'Part 3' -> 3)")
+    pages: list[int] = Field(description="1-based page numbers of this story, in order")
+
+
+class IssueContents(BaseModel):
+    stories: list[Story]
+
+
+CONTENTS_PROMPT = """These {n} images are every page of issue {issue} of the comic "{series}", in order.
+Page numbers start at 1.
+List every comic strip story in the issue, in page order. A story usually starts on a page with its title
+logo and runs until the next one starts. Leave out covers, adverts, letters pages, editorials, text-only
+stories, puzzles and pin-ups.
+For the strip's name, use exactly one of these names if it is one of them: {known}.
+Give the story's own title and part number only if they are printed; don't invent them."""
+
 TAG_PROMPT = """These {n} images are every page of one issue of the comic "{series}", in order.
 Page numbers start at 1.
 Which pages contain the strip "{strip}"{arc_hint}? A strip usually starts on a page with its title logo and runs
@@ -104,6 +123,16 @@ class Reader:
             parts.append(f"Page {i}:")
             parts.append(types.Part.from_bytes(data=t, mime_type="image/jpeg"))
         return self._call(self.tag_model, parts, StripPages)
+
+    def contents(self, thumbs: list[bytes], series: str, issue, known_strips: list[str]) -> IssueContents:
+        from google.genai import types
+
+        parts = [CONTENTS_PROMPT.format(n=len(thumbs), issue=issue, series=series,
+                                        known=", ".join(known_strips) or "(none yet)")]
+        for i, t in enumerate(thumbs, 1):
+            parts.append(f"Page {i}:")
+            parts.append(types.Part.from_bytes(data=t, mime_type="image/jpeg"))
+        return self._call(self.tag_model, parts, IssueContents)
 
     def read_page(self, image: bytes, mime: str, strip: str, arc: str, cast_names: list[str],
                   series: str = "2000 AD") -> PageScript:

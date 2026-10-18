@@ -27,9 +27,17 @@
           <div id="import-status">{% include "_import_status.html" %}</div>
         {% elif sr.index_status in ('queued', 'running') %}
           <span class="indexing"><span class="spinner"></span>{{ sr.index_message or 'Waiting…' }}</span>
+          <form method="post" action="/library/{{ sr.id }}/stop" class="inline"><button class="small">Stop</button></form>
         {% else %}
-          {% if sr.index_message %}<span class="hint {{ 'test bad' if sr.index_status == 'failed' }}">{{ sr.index_message }}</span><br>{% endif %}
-          <span class="hint">Not looked for yet</span>
+          {% if sr.index_message %}<span class="hint {{ 'test bad' if sr.index_status == 'failed' }}">{{ sr.index_message }}</span><br>
+          {% elif sr.issue_count %}<span class="hint">Not looked for yet. </span>{% endif %}
+          {% if sr.issue_count %}
+          <form method="post" action="/library/{{ sr.id }}/index" class="inline">
+            <button class="small {{ 'primary' if not sr.indexed_at }}"
+                    title="Comic Vine's story arcs first (with a Comic Vine key), then Gemini reads each remaining issue's contents: one call per issue">
+              {{ 'Find stories again' if sr.indexed_at or sr.index_message else 'Find stories' }}</button>
+          </form>
+          {% endif %}
         {% endif %}
       </td>
     </tr>

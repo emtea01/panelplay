@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import catalog, settings as S
 from .db import DB
+from .indexer import Indexer
 from .jobs import Runner
 
 HERE = Path(__file__).resolve().parent
@@ -22,11 +23,13 @@ PAGE_SIZE = 50
 db = DB(S.data_dir() / "panelplay.db")
 S.seed_from_dev_setup(db)
 runner = Runner(db)
+indexer = Indexer(db)
 
 
 @asynccontextmanager
 async def lifespan(_app):
     runner.start()
+    indexer.start()
     if not db.series_list():
         start_scan()  # first start: find what's in the library
     yield
@@ -253,6 +256,20 @@ def scan_library(request: Request):
 @app.get("/library/scan", response_class=HTMLResponse)
 def scan_status(request: Request):
     return templates.TemplateResponse(request, "_scan_status.html", dict(library_scan=library_scan))
+
+
+@app.post("/library/{series_id}/index")
+def index_series(series_id: int):
+    if not db.series(series_id):
+        raise HTTPException(404)
+    indexer.queue(series_id)
+    return RedirectResponse("/library", status_code=303)
+
+
+@app.post("/library/{series_id}/stop")
+def stop_index(series_id: int):
+    indexer.stop(series_id)
+    return RedirectResponse("/library", status_code=303)
 
 
 @app.post("/library/{series_id}/kind")
