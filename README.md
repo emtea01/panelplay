@@ -1,6 +1,6 @@
-# narrate2000ad — proof of concept
+# PanelPlay
 
-Turns a 2000 AD story arc from your Komga archive into narrated, character-voiced episodes in Plex.
+Turns the story arcs in a comics library (2000 AD first and foremost) into narrated, character-voiced episodes in Plex.
 One prog = one episode; one arc = one season.
 
 ```
@@ -93,12 +93,21 @@ pip install -r requirements.txt
 python -m portal            # http://127.0.0.1:8077   (PANELPLAY_HOST=0.0.0.0 to reach it from the LAN)
 ```
 
-- **Story arcs**: the catalogue, imported from the fan-compiled 2000 AD story indexes on Wikimedia Commons
-  (every series, plus a detailed Judge Dredd index with credits). Filter by strip, search, show only stories
-  your archive holds, and render or re-render. Stories can also be added or edited by hand.
+- **Library**: every series in the comics library. Point Settings at the root comics folder; each series lives
+  in a folder of its own (Mylar's `series.json` supplies the name, year, publisher and Comic Vine id, otherwise
+  the folder name does). CBZ and CBR (via bsdtar) are read. **Find stories** fills a series' story arcs:
+  - 2000 AD: the fan-compiled story indexes on Wikimedia Commons (every series, plus a detailed Judge Dredd
+    index with credits).
+  - Everything else: Comic Vine's story arcs (with a Comic Vine key), then Gemini lists each issue's strips,
+    titles, part numbers and pages (one call per issue, cached; the daily limit pauses it and finding stories
+    again carries on). Episodes are linked into stories across issues, and a render reuses the pages found.
+    Set a series to *Anthology* or *One story per issue* if the automatic guess is wrong.
+- **Story arcs**: the catalogue. Filter by strip, series or status, search, show only stories your library
+  holds, and render or re-render. Stories can be added or edited by hand (including which strip, i.e. Plex
+  show, they belong to).
 - **Renders**: the queue (one render at a time) with live progress, logs and cancel; every render is recorded.
-- **Settings**: comics folder or Komga, the Plex output folder, the working folder, API keys (Gemini,
-  ElevenLabs, Comic Vine) with a Test button for each, the voice cast, and picture options.
+- **Settings**: the comics library folder or Komga, the Plex output folder, the working folder, API keys
+  (Gemini, ElevenLabs, Comic Vine) with a Test button for each, the voice cast, and picture options.
 
 Re-rendering reuses what Gemini read and every voice line already made (cached by voice and text), so it only
 spends credits on lines that change, e.g. after re-casting a character. "Re-read" asks Gemini to read the pages again.
@@ -108,9 +117,10 @@ cached index PDFs, and per-render configs. On first start the portal borrows `co
 `GEMINI_API_KEY` / `ELEVENLABS_API_KEY` environment variables if present. API keys are stored in plain text in
 the database, and the portal has no login, so keep it on your LAN.
 
-Plex seasons are years of publication (1977 is season 1), holding every episode of the strip that year in prog
-order, one-offs and multi-part stories together: Robot Wars part 1 (prog 10) is Judge Dredd s01e09. Set a season
-by hand on a story's page to give that story a season of its own.
+Plex has one show per strip, whichever titles it ran in (Judge Dredd from 2000 AD and the Megazine together).
+Seasons are years of publication, the strip's first year being season 1, and hold every episode of the strip
+that year in publication order, one-offs and multi-part stories together: Robot Wars part 1 (prog 10) is Judge
+Dredd s01e09. Set a season by hand on a story's page to give that story a season of its own.
 
 ## Proxmox
 
