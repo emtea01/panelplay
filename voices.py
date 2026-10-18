@@ -82,11 +82,8 @@ def apply_fx(audio: np.ndarray, fx: str) -> np.ndarray:
         # Ring modulation: the classic tin-can robot voice, half mixed with the dry voice.
         t = np.arange(len(audio)) / SR
         return (0.45 * audio + 0.75 * audio * np.sin(2 * np.pi * 45 * t)).astype(np.float32)
-    if fx == "gravel":
-        # Soft saturation plus a little rasp: a rougher, more worn-in voice.
-        rasp = np.random.default_rng(0).standard_normal(len(audio)).astype(np.float32)
-        rough = np.tanh(audio * 3.0) / np.tanh(3.0) + 0.04 * rasp * np.abs(audio)
-        return (0.6 * rough + 0.4 * audio).astype(np.float32)
+    if fx in ("gravel", "gravel_heavy"):
+        return _gravel(audio, 1.0 if fx == "gravel" else 1.8)
     if fx == "radio":
         # Crude telephone band-pass using FFT masking.
         spec = np.fft.rfft(audio)
@@ -95,6 +92,39 @@ def apply_fx(audio: np.ndarray, fx: str) -> np.ndarray:
         out = np.fft.irfft(spec, n=len(audio))
         return np.clip(out * 1.6, -1, 1).astype(np.float32)
     return audio
+
+
+def _band(x: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    spec = np.fft.rfft(x)
+    freqs = np.fft.rfftfreq(len(x), 1 / SR)
+    spec[(freqs < lo) | (freqs > hi)] = 0
+    return np.fft.irfft(spec, n=len(x))
+
+
+def _gravel(audio: np.ndarray, amt: float) -> np.ndarray:
+    """A rough, worn voice: growl (jittery 35-55 Hz tremble), drive, breathy rasp that follows the voice, more chest."""
+    if len(audio) < SR // 20:
+        return audio
+    rng = np.random.default_rng(0)
+    n = len(audio)
+    win = int(SR * 0.01)
+    env = np.convolve(np.abs(audio), np.ones(win) / win, mode="same")
+    # Growl: amplitude wobble at a drifting low frequency reads as roughness / vocal fry.
+    drift = np.convolve(rng.standard_normal(n), np.ones(SR // 10) / (SR // 10), mode="same")
+    freq = 45 + 10 * drift / (np.abs(drift).max() + 1e-9)
+    phase = np.cumsum(2 * np.pi * freq / SR)
+    x = audio * (1 - 0.22 * amt * (0.5 + 0.5 * np.sin(phase)))
+    # Drive.
+    drive = 1.5 + 2.0 * amt
+    x = np.tanh(x * drive) / np.tanh(drive)
+    # Rasp: band-limited noise shaped by the voice's own loudness.
+    hiss = _band(rng.standard_normal(n), 1200, 5000)
+    hiss /= hiss.std() + 1e-9
+    x = x + 0.3 * amt * hiss * env
+    # Chest.
+    x = x + 0.35 * amt * _band(x, 110, 320)
+    peak = np.abs(x).max() + 1e-9
+    return (x / peak * min(0.98, np.abs(audio).max() * 1.1)).astype(np.float32)
 
 
 def make_tts(engine: str):

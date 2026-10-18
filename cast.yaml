@@ -3,7 +3,7 @@
 # American: am_adam am_michael am_onyx am_fenrir am_puck am_echo am_eric am_liam
 #           af_heart af_bella af_nicole af_sarah af_sky
 #
-# speed: 1.0 is normal.  pitch: semitones (e.g. -2 is deeper, same pace).  fx: robot | radio | gravel | none
+# speed: 1.0 is normal.  pitch: semitones (e.g. -2 is deeper, same pace).  fx: robot | radio | gravel | gravel_heavy | none
 # voice can blend several Kokoro voices: "am_onyx,am_fenrir"
 # Speaker names must match what Gemini returns; the reader is told to use these exact names.
 
