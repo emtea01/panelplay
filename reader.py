@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 class StripPages(BaseModel):
     pages: list[int] = Field(description="1-based page numbers belonging to the strip, in order")
     episode_title: Optional[str] = Field(None, description="Episode or chapter title printed on the strip, if any")
-    part: Optional[int] = Field(None, description="Part number if printed (e.g. 'Part 3' -> 3)")
+    part: Optional[int] = Field(None, description="Part number if printed with the story title (e.g. 'Part 3' -> 3). "
+                                                "Not a 'Thrill' number, which is the strip's slot in the issue")
 
 
 class Line(BaseModel):
@@ -33,7 +34,9 @@ class PageScript(BaseModel):
 class Story(BaseModel):
     strip: str = Field(description="The strip's name, as its title logo shows it (e.g. 'Judge Dredd')")
     title: Optional[str] = Field(None, description="This story's own title, if one is printed (e.g. 'The Cursed Earth')")
-    part: Optional[int] = Field(None, description="Part or episode number if printed (e.g. 'Part 3' -> 3)")
+    part: Optional[int] = Field(None, description="Part or episode number if printed with the story title "
+                                                "(e.g. 'Part 3' -> 3). Not a 'Thrill' number, which is the "
+                                                "strip's slot in the issue")
     pages: list[int] = Field(description="1-based page numbers of this story, in order")
 
 

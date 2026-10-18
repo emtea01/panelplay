@@ -159,7 +159,11 @@ def main():
 
         engine = args.tts or cfg["tts"]["engine"]
         renderer = Renderer(cfg["render"], make_tts(engine, cfg.get("elevenlabs"), work / "tts_cache"), cast)
-        part = tag.get("part") or ep
+        # The arc's prog list is the authority; Gemini's printed part number is only a cross-check (it has
+        # mistaken 2000 AD's "Thrill 3" corner badge for "Part 3").
+        part = ep
+        if tag.get("part") and tag["part"] != ep:
+            print(f"  note: page says part {tag['part']}, using {ep} from the arc's prog list")
         part_label = f"Part {part}" + (f": {tag['episode_title']}" if tag.get("episode_title") else "")
         show = safe(args.strip)
         season, plex_ep = plex.get(prog, (args.season, ep))
