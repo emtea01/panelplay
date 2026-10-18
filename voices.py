@@ -97,7 +97,13 @@ class ElevenLabsTTS:
                         params={"output_format": "mp3_44100_128"},
                         json={"text": text, "model_id": self.model}, timeout=180)
         if not r.ok:
-            raise SystemExit(f"ElevenLabs HTTP {r.status_code}: {r.text[:300]}\n(lines voiced so far are cached)")
+            # One line, ElevenLabs' own message first: the portal shows the last output line as the job's error.
+            try:
+                detail = r.json().get("detail")
+                detail = detail.get("message") or detail.get("status") if isinstance(detail, dict) else detail
+            except ValueError:
+                detail = r.text[:300]
+            raise SystemExit(f"ElevenLabs HTTP {r.status_code}: {detail} (lines voiced so far are cached)")
         # Decode the MP3 to 24 kHz mono float with ffmpeg.
         pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "f32le", "-ac", "1", "-ar", str(SR), "pipe:1"],
                              input=r.content, capture_output=True, check=True).stdout
