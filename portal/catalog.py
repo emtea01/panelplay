@@ -228,7 +228,7 @@ def parse_dredd_index(pdf, latest=None) -> list[dict]:
     return arcs
 
 
-def _fetch(url: str, cache_file, timeout=120) -> bytes:
+def _fetch(url: str, cache_file, timeout=120, say=print) -> bytes:
     """Download an index, keeping a copy. Wikimedia rate-limits bots, so retry politely and fall back to the copy."""
     import time
 
@@ -238,7 +238,9 @@ def _fetch(url: str, cache_file, timeout=120) -> bytes:
             r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
             if r.status_code == 429 and attempt < 2:
                 wait = r.headers.get("Retry-After", "")
-                time.sleep(min(60, int(wait) if wait.isdigit() else 20))
+                wait = min(60, int(wait) if wait.isdigit() else 20)
+                say(f"Wikimedia is busy; trying again in {wait} seconds…")
+                time.sleep(wait)
                 continue
             r.raise_for_status()
             cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -252,13 +254,19 @@ def _fetch(url: str, cache_file, timeout=120) -> bytes:
     raise RuntimeError(f"Couldn't download the story index ({error})")
 
 
-def download_and_parse(cache_dir, latest=None, prefer_cache=True) -> list[dict]:
+def download_and_parse(cache_dir, latest=None, prefer_cache=True, say=print) -> list[dict]:
     import pdfplumber
 
     arcs = []
+    what = {"series": "the story index", "dredd": "the Judge Dredd index"}
     for name, url in INDEX_URLS.items():
         cache_file = cache_dir / f"{name}.pdf"
-        data = cache_file.read_bytes() if prefer_cache and cache_file.exists() else _fetch(url, cache_file)
+        if prefer_cache and cache_file.exists():
+            data = cache_file.read_bytes()
+        else:
+            say(f"Downloading {what.get(name, name)} from Wikimedia Commons…")
+            data = _fetch(url, cache_file, say=say)
+        say(f"Reading {what.get(name, name)}…")
         with pdfplumber.open(io.BytesIO(data)) as pdf:
             arcs += parse_dredd_index(pdf, latest) if name == "dredd" else parse_series_index(pdf, latest)
     return arcs

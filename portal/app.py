@@ -326,7 +326,7 @@ async def save_settings(request: Request):
 @app.post("/settings/import-index", response_class=HTMLResponse)
 def import_index(request: Request, refresh: str = Form("")):
     if not index_import["running"]:
-        index_import.update(running=True, message="Fetching the story indexes…")
+        index_import.update(running=True, message="Starting…")
         threading.Thread(target=_import_index, args=(bool(refresh),), daemon=True).start()
     return templates.TemplateResponse(request, "_import_status.html", dict(index_import=index_import))
 
@@ -344,7 +344,9 @@ def _import_index(refresh=False):
             return
         held = db.issues(main["id"]).get(main["id"], {})
         arcs = catalog.download_and_parse(S.data_dir() / "index", latest=max(held) if held else None,
-                                          prefer_cache=not refresh)
+                                          prefer_cache=not refresh,
+                                          say=lambda m: index_import.update(message=m))
+        index_import.update(message="Saving the stories…")
         with db.conn() as c:
             new = sum(db.upsert_arc(c, {**a, "series_id": main["id"]}) for a in arcs)
         # Rows from earlier imports that were notes, not stories.
