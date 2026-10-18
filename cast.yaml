@@ -3,7 +3,9 @@
 # American: am_adam am_michael am_onyx am_fenrir am_puck am_echo am_eric am_liam
 #           af_heart af_bella af_nicole af_sarah af_sky
 #
-# speed: 1.0 is normal.  fx: robot | radio | none
+# speed: 1.0 is normal (Kokoro only).  fx: robot | radio | none
+# engine: kokoro (default) | elevenlabs. For elevenlabs, voice is the ElevenLabs voice ID; lines are cached
+# in work/tts_cache so re-renders don't spend credits.
 # Speaker names must match what Gemini returns; the reader is told to use these exact names.
 
 narrator:
@@ -11,7 +13,7 @@ narrator:
   speed: 0.95
 
 characters:
-  Judge Dredd:   {voice: am_onyx,   speed: 0.92}
+  Judge Dredd:   {engine: elevenlabs, voice: 3AB4DRkXNpzdWya4NGLV}   # "old cop", designed in ElevenLabs
   Walter:        {voice: bm_lewis,  speed: 1.0,  fx: robot}
   Call-Me-Kenneth: {voice: am_fenrir, speed: 0.95, fx: robot}
   Tharg:         {voice: bm_george, speed: 0.95}

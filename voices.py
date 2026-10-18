@@ -1,5 +1,7 @@
-"""Text-to-speech with a cast list. Kokoro runs on CPU; 'fake' makes tones for testing."""
+"""Text-to-speech with a cast list. Kokoro runs on CPU, ElevenLabs in the cloud (per character); 'fake' makes tones."""
 import hashlib
+import os
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -66,6 +68,55 @@ class KokoroTTS:
         return np.concatenate(chunks).astype(np.float32) if chunks else np.zeros(1, np.float32)
 
 
+class ElevenLabsTTS:
+    """ElevenLabs voices, one request per line. Every line is cached on disk, so re-renders cost no credits."""
+
+    def __init__(self, cfg: dict, cache_dir: Path):
+        import requests
+
+        self.key = cfg.get("api_key") or os.environ.get("ELEVENLABS_API_KEY")
+        if not self.key:
+            raise SystemExit("No ElevenLabs API key: set elevenlabs.api_key in config.yaml or ELEVENLABS_API_KEY")
+        self.model = cfg.get("model", "eleven_v3")
+        self.cache = cache_dir
+        self.cache.mkdir(parents=True, exist_ok=True)
+        self.s = requests.Session()
+        self.s.headers["xi-api-key"] = self.key
+
+    def say(self, text: str, voice: str, speed: float) -> np.ndarray:
+        h = hashlib.sha1(f"{self.model}|{voice}|{text}".encode()).hexdigest()[:20]
+        f = self.cache / f"{h}.npy"
+        if f.exists():
+            return np.load(f)
+        r = self.s.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}",
+                        params={"output_format": "mp3_44100_128"},
+                        json={"text": text, "model_id": self.model}, timeout=180)
+        if not r.ok:
+            raise SystemExit(f"ElevenLabs HTTP {r.status_code}: {r.text[:300]}\n(lines voiced so far are cached)")
+        # Decode the MP3 to 24 kHz mono float with ffmpeg.
+        pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "f32le", "-ac", "1", "-ar", str(SR), "pipe:1"],
+                             input=r.content, capture_output=True, check=True).stdout
+        audio = np.frombuffer(pcm, np.float32).copy()
+        np.save(f, audio)
+        print(f"        elevenlabs: {len(text)} chars", flush=True)
+        return audio
+
+
+class MultiTTS:
+    """Routes each line to the engine its cast entry asks for (default Kokoro), loading engines only when used."""
+
+    def __init__(self, default: str, el_cfg: dict, cache_dir: Path):
+        self.default, self.el_cfg, self.cache_dir = default, el_cfg, cache_dir
+        self.engines = {}
+
+    def say(self, text: str, voice: str, speed: float, engine: str | None = None) -> np.ndarray:
+        name = "fake" if self.default == "fake" else (engine or self.default)
+        if name not in self.engines:
+            self.engines[name] = {"kokoro": KokoroTTS, "fake": FakeTTS,
+                                  "elevenlabs": lambda: ElevenLabsTTS(self.el_cfg, self.cache_dir / "elevenlabs")}[name]()
+        return self.engines[name].say(text, voice, speed)
+
+
 class FakeTTS:
     """Tone whose length tracks the text, so the render can be tested without models."""
 
@@ -92,15 +143,15 @@ def apply_fx(audio: np.ndarray, fx: str) -> np.ndarray:
     return audio
 
 
-def make_tts(engine: str):
-    return KokoroTTS() if engine == "kokoro" else FakeTTS()
+def make_tts(engine: str, el_cfg: dict | None = None, cache_dir: Path | None = None):
+    return MultiTTS(engine, el_cfg or {}, cache_dir or Path("work/tts_cache"))
 
 
 def speak_line(tts, cast: Cast, line: dict) -> np.ndarray:
     v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"])
     delivery = line.get("delivery", "normal")
     speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(delivery, 1.0)
-    audio = tts.say(line["text"], v["voice"], speed)
+    audio = tts.say(line["text"], v["voice"], speed, engine=v.get("engine"))
     fx = v.get("fx") or ("radio" if delivery == "radio" else None)
     if fx:
         audio = apply_fx(audio, fx)

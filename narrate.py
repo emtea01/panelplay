@@ -132,12 +132,13 @@ def main():
         images = [load_image(source.page(book_(), pg)[0]) for pg in pages]
 
         engine = args.tts or cfg["tts"]["engine"]
-        renderer = Renderer(cfg["render"], make_tts(engine), cast)
+        renderer = Renderer(cfg["render"], make_tts(engine, cfg.get("elevenlabs"), work / "tts_cache"), cast)
         part = tag.get("part") or ep
         part_label = f"Part {part}" + (f": {tag['episode_title']}" if tag.get("episode_title") else "")
         show = safe(args.strip)
         season_dir = Path(cfg["paths"]["plex"]) / show / f"Season {args.season:02d}"
         out = season_dir / f"{show} - s{args.season:02d}e{ep:02d} - {safe(args.arc)} - Part {part}.mp4"
+        season_dir.mkdir(parents=True, exist_ok=True)  # fail now, not after a long render, if it isn't writable
         print(f"  rendering -> {out}")
         renderer.episode(images, scripts, args.strip, args.arc, part_label,
                          f"{args.strip}. {args.arc}. Part {part}.", pdir / "segments", out)

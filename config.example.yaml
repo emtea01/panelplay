@@ -33,6 +33,12 @@ gemini:
 tts:
   engine: kokoro     # "kokoro" (real voices, CPU) or "fake" (tones, for testing the render)
 
+# Used for characters with engine: elevenlabs in cast.yaml.
+elevenlabs:
+  # Key from elevenlabs.io (needs Text to Speech access), or set ELEVENLABS_API_KEY in the environment.
+  api_key: ""
+  model: eleven_v3
+
 render:
   width: 1920
   height: 1080
