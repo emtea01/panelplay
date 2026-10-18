@@ -1,7 +1,7 @@
 # PanelPlay
 
-Turns the story arcs in a comics library (2000 AD first and foremost) into narrated, character-voiced episodes in Plex.
-One issue = one episode; one Plex show per strip, with a season for each year it ran.
+Turns the story arcs in a comics library into narrated, character-voiced episodes.
+One issue = one episode; one show per strip, with a season for each year it ran.
 
 ```
 Komga / CBZ ──► Gemini Flash (free tier) ──► page scripts (JSON) ──► Kokoro voices (CPU) ──► ffmpeg ──► Plex
