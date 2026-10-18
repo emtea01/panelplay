@@ -7,3 +7,9 @@ pyyaml
 pillow
 numpy
 requests
+# Portal
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+pdfplumber

@@ -1,0 +1,43 @@
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>Story</th><th class="hide-sm">Progs</th><th class="num hide-sm">Episodes</th><th>Status</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for a in rows %}
+    <tr>
+      <td class="title-cell">
+        <a href="/arcs/{{ a.id }}">{{ a.title }}</a><br><span class="strip">{{ a.strip }}</span>
+      </td>
+      <td class="progs hide-sm">{{ format_progs(a.progs) }}{% if a.specials %} <span class="hint">+ {{ a.specials }}</span>{% endif %}</td>
+      <td class="num hide-sm">{{ a.total }}</td>
+      <td>
+        <span class="badge {{ a.status[1] }}">{{ a.status[0] }}</span>
+        {% if not a.available %}<br><span class="badge missing" title="Not every prog is in your archive">{% if a.specials %}year-end special{% else %}{{ a.missing|length }} missing{% endif %}</span>{% endif %}
+      </td>
+      <td class="num">
+        {% if a.status[1] not in ('running', 'queued') %}
+        <form class="inline" method="post" action="/arcs/{{ a.id }}/render">
+          <input type="hidden" name="mode" value="render">
+          <button class="small {{ 'primary' if a.done == 0 }}" {{ 'disabled' if not a.progs }}>{{ 'Re-render' if a.done else 'Render' }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="hint">Nothing matches.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="pager">
+  <span>{{ count }} stor{{ 'y' if count == 1 else 'ies' }}</span>
+  {% if pages > 1 %}
+  <span>
+    {% set qs = 'strip=' ~ (strip|urlencode) ~ '&q=' ~ (q|urlencode) ~ '&available=' ~ available ~ '&status=' ~ status %}
+    {% if page > 1 %}<a class="btn" href="/arcs?{{ qs }}&page={{ page - 1 }}" hx-get="/arcs?{{ qs }}&page={{ page - 1 }}" hx-target="#arc-table" hx-push-url="true">← Prev</a>{% endif %}
+    Page {{ page }} of {{ pages }}
+    {% if page < pages %}<a class="btn" href="/arcs?{{ qs }}&page={{ page + 1 }}" hx-get="/arcs?{{ qs }}&page={{ page + 1 }}" hx-target="#arc-table" hx-push-url="true">Next →</a>{% endif %}
+  </span>
+  {% endif %}
+</div>

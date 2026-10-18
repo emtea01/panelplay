@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Renders{% endblock %}
+{% block content %}
+<h1>Renders</h1>
+<p class="sub">One render runs at a time; the rest wait in the queue. This page updates itself.</p>
+<div hx-get="/renders" hx-trigger="every 3s" hx-swap="innerHTML">
+  {% include "_jobs_table.html" %}
+</div>
+{% endblock %}

@@ -87,8 +87,29 @@ Delivery tags from Gemini (shout/whisper/radio) nudge speed and volume.
 - Sound effects are skipped by default (`render.read_sfx`).
 - Pages are sent to Google's free tier, which may use them to improve its models.
 
-## Next step: the portal
+## The portal
 
-Once an episode looks and sounds right: a small Blazor app reading an arc index (strip → arc → prog range,
-parsed from the 2000 AD wiki/story index) and covers from Komga, with a "Narrate this" button that queues
-`narrate.py` jobs and shows status until the episode lands in Plex.
+A small web app (FastAPI + htmx, no build step) for picking stories and rendering them:
+
+```bash
+pip install -r requirements.txt
+python -m portal            # http://127.0.0.1:8077   (PANELPLAY_HOST=0.0.0.0 to reach it from the LAN)
+```
+
+- **Story arcs**: the catalogue, imported from the fan-compiled 2000 AD story indexes on Wikimedia Commons
+  (every series, plus a detailed Judge Dredd index with credits). Filter by strip, search, show only stories
+  your archive holds, and render or re-render. Stories can also be added or edited by hand.
+- **Renders**: the queue (one render at a time) with live progress, logs and cancel; every render is recorded.
+- **Settings**: comics folder or Komga, the Plex output folder, the working folder, API keys (Gemini,
+  ElevenLabs, Comic Vine) with a Test button for each, the voice cast, and picture options.
+
+Re-rendering reuses what Gemini read and every voice line already made (cached by voice and text), so it only
+spends credits on lines that change, e.g. after re-casting a character. "Re-read" asks Gemini to read the pages again.
+
+State lives in `data/` (`PANELPLAY_DATA` to move it): `panelplay.db` (settings, catalogue, render history),
+cached index PDFs, and per-render configs. On first start the portal borrows `config.yaml` and the
+`GEMINI_API_KEY` / `ELEVENLABS_API_KEY` environment variables if present. API keys are stored in plain text in
+the database, and the portal has no login, so keep it on your LAN.
+
+Plex seasons are numbered by a story's position within its strip (Robot Wars is Judge Dredd season 9); set a
+season by hand on the story's page to override.

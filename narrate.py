@@ -45,11 +45,16 @@ def main():
     ap.add_argument("--progs", required=True, help='e.g. "10-17" or "10,11,14-16"')
     ap.add_argument("--season", type=int, default=1, help="Plex season number for this arc")
     ap.add_argument("--stage", choices=["tag", "read", "render", "all"], default="all")
-    ap.add_argument("--only", type=int, help="process just this prog number from the range")
+    ap.add_argument("--only", help='process just these progs from the range, e.g. "10" or "11-13,15"')
     ap.add_argument("--config", default=str(HERE / "config.yaml"))
     ap.add_argument("--cast", default=str(HERE / "cast.yaml"))
     ap.add_argument("--tts", choices=["kokoro", "fake"], help="override tts.engine from config")
+    ap.add_argument("--events", action="store_true", help="also print machine-readable @@{json} progress lines")
     args = ap.parse_args()
+
+    def emit(event, **data):
+        if args.events:
+            print("@@" + json.dumps({"event": event, **data}), flush=True)
 
     cfg = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     work = Path(cfg["paths"]["work"]).expanduser()
@@ -58,7 +63,8 @@ def main():
     arc_dir = work / f"{slug(args.strip)}--{slug(args.arc)}"
     progs = parse_progs(args.progs)
     if args.only:
-        progs = [p for p in progs if p == args.only]
+        only = set(parse_progs(args.only))
+        progs = [p for p in progs if p in only]
 
     from sources import make_source
     from render import Renderer, load_image
@@ -81,6 +87,7 @@ def main():
         pdir = arc_dir / f"prog_{prog:04d}"
         pdir.mkdir(parents=True, exist_ok=True)
         print(f"\nProg {prog}  (episode {ep})")
+        emit("prog_start", prog=prog, episode=ep)
         book = None
 
         def book_():
@@ -88,6 +95,13 @@ def main():
             if book is None:
                 book = source.prog(prog)
             return book
+
+        try:
+            book_()
+        except SystemExit as e:  # prog missing from the archive: carry on with the rest of the arc
+            print(f"  {e}")
+            emit("prog_skip", prog=prog, episode=ep, reason="not_found", detail=str(e))
+            continue
 
         # 1. Which pages are this strip?
         tag_file = pdir / "tag.json"
@@ -97,6 +111,7 @@ def main():
                 continue
             n = source.page_count(book_())
             print(f"  finding '{args.strip}' in {n} pages")
+            emit("stage", prog=prog, stage="tag", detail=f"finding the strip in {n} pages")
             thumbs = [source.thumbnail(book_(), i) for i in range(1, n + 1)]
             tag = get_reader().tag_pages(thumbs, args.strip, args.arc).model_dump()
             tag_file.write_text(json.dumps(tag, indent=2), encoding="utf-8")
@@ -104,6 +119,8 @@ def main():
         pages = tag["pages"]
         if not pages:
             print(f"  '{args.strip}' not found in this prog; edit {tag_file} if that's wrong")
+            emit("prog_skip", prog=prog, episode=ep, reason="strip_not_found",
+                 detail=f"'{args.strip}' wasn't found in this prog")
             continue
         print(f"  pages {pages}")
         if args.stage == "tag":
@@ -115,6 +132,7 @@ def main():
             if sfile.exists() or args.stage == "render":
                 continue
             print(f"  reading page {pg}")
+            emit("stage", prog=prog, stage="read", detail=f"reading page {pg} ({pages.index(pg) + 1} of {len(pages)})")
             img, mime = source.page(book_(), pg)
             script = get_reader().read_page(img, mime, args.strip, args.arc, cast.names)
             sfile.write_text(json.dumps(script.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
@@ -140,8 +158,10 @@ def main():
         out = season_dir / f"{show} - s{args.season:02d}e{ep:02d} - {safe(args.arc)} - Part {part}.mp4"
         season_dir.mkdir(parents=True, exist_ok=True)  # fail now, not after a long render, if it isn't writable
         print(f"  rendering -> {out}")
+        total = sum(len(s["panels"]) for s in scripts)
         renderer.episode(images, scripts, args.strip, args.arc, part_label,
-                         f"{args.strip}. {args.arc}. Part {part}.", pdir / "segments", out)
+                         f"{args.strip}. {args.arc}. Part {part}.", pdir / "segments", out,
+                         progress=lambda n: emit("stage", prog=prog, stage="render", detail=f"panel {n} of {total}"))
 
         # Artwork for Plex (used when the library is set to prefer local assets).
         try:
@@ -153,6 +173,7 @@ def main():
         except Exception as e:  # artwork is a nice-to-have
             print(f"  (couldn't save cover art: {e})")
         print("  done")
+        emit("episode_done", prog=prog, episode=ep, path=str(out))
 
 
 def _write_transcript(path: Path, scripts):

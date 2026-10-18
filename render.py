@@ -180,8 +180,10 @@ class Renderer:
         subprocess.run(cmd, check=True)
         shutil.rmtree(fdir)
 
-    def episode(self, pages, scripts, strip, arc, part_label, title_line, seg_dir: Path, out_file: Path):
-        """pages: list of PIL images; scripts: list of page-script dicts (same order)."""
+    def episode(self, pages, scripts, strip, arc, part_label, title_line, seg_dir: Path, out_file: Path,
+                progress=None):
+        """pages: list of PIL images; scripts: list of page-script dicts (same order).
+        progress: optional callback(panel_number) as each panel is rendered."""
         seg_dir.mkdir(parents=True, exist_ok=True)
         segs = []
 
@@ -202,6 +204,8 @@ class Renderer:
             for i, panel in enumerate(script["panels"]):
                 n += 1
                 print(f"      panel {n}", end="\r", flush=True)
+                if progress:
+                    progress(n)
                 rect = self.panel_rect(page, panel["box_2d"])
                 if self.punch and rect:
                     # Snap in (from the whole page on a page's first panel), then keep pushing in slowly.

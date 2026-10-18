@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ arc.title }}{% endblock %}
+{% block content %}
+<p class="hint"><a href="/arcs?strip={{ arc.strip|urlencode }}">← {{ arc.strip }}</a></p>
+<h1>{{ arc.title }}</h1>
+<p class="sub">{{ arc.strip }} · progs {{ format_progs(arc.progs) or '—' }}{% if arc.specials %} + {{ arc.specials }}{% endif %} · Plex season {{ season }}</p>
+
+{% if problems %}
+<div class="notice"><strong>Before you can render:</strong>
+  <ul>{% for p in problems %}<li><a href="/settings">{{ p }}</a></li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if arc.specials %}
+<div class="notice">This story includes a year-end special ({{ arc.specials }}). Those progs' numbers clash with the
+  regular progs 2000–2015 of 2016–17, so they're left out of the render.</div>
+{% endif %}
+
+<div class="cols">
+  <div>
+    <h2 style="margin-top:0">Episodes</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th class="num">Ep</th><th>Prog</th><th>Status</th><th class="hide-sm">Rendered</th><th></th></tr></thead>
+      <tbody>
+      {% for e in episodes %}
+        <tr>
+          <td class="num">{{ e.episode }}</td>
+          <td class="progs">{{ e.prog }}</td>
+          <td>
+            {% if not e.held %}<span class="badge missing">not in archive</span>
+            {% elif e.status == 'rendered' %}<span class="badge done">rendered</span>
+            {% elif e.status == 'failed' %}<span class="badge failed" title="{{ e.detail }}">failed</span>
+            {% elif e.status == 'strip_not_found' %}<span class="badge bad" title="{{ e.detail }}">strip not found</span>
+            {% elif e.status == 'not_found' %}<span class="badge missing">not in archive</span>
+            {% elif e.read %}<span class="badge">pages read</span>
+            {% else %}<span class="badge">—</span>{% endif %}
+            {% if e.path %}<div class="path">{{ e.path }}</div>{% endif %}
+          </td>
+          <td class="hide-sm hint">{{ e.when|when }}</td>
+          <td class="num">
+            {% if e.transcript %}<a class="btn small" href="/arcs/{{ arc.id }}/transcript/{{ e.prog }}" target="_blank">Script</a>{% endif %}
+            {% if e.held and arc.status[1] not in ('running', 'queued') %}
+            <form class="inline" method="post" action="/arcs/{{ arc.id }}/render">
+              <input type="hidden" name="prog" value="{{ e.prog }}"><input type="hidden" name="mode" value="render">
+              <button class="small" title="Render just this episode">{{ 'Re-render' if e.status == 'rendered' else 'Render' }}</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {% if jobs %}
+    <h2>Render history</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>What</th><th>Status</th><th class="hide-sm">When</th></tr></thead>
+      <tbody>
+      {% for j in jobs %}
+        <tr>
+          <td><a href="/renders/{{ j.id }}">{{ j.id }}</a></td>
+          <td>{{ {'reread': 'Re-read and render', 'rest': 'Render the rest'}.get(j.mode, 'Render') }}{% if j.only_prog %} prog {{ j.only_prog }}{% endif %}</td>
+          <td><span class="badge {{ j.status if j.status != 'done' else 'done' }}">{{ j.status }}</span> <span class="hint">{{ j.progress }}</span></td>
+          <td class="hide-sm hint">{{ j.created|when }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <aside class="card">
+    <dl class="facts">
+      <dt>Status</dt><dd><span class="badge {{ arc.status[1] }}">{{ arc.status[0] }}</span></dd>
+      <dt>Episodes</dt><dd>{{ arc.total }}{% if arc.missing %} ({{ arc.missing|length }} not in archive){% endif %}</dd>
+      {% if arc.credits %}<dt>Credits</dt><dd>{{ arc.credits }}</dd>{% endif %}
+      {% if arc.notes %}<dt>Notes</dt><dd>{{ arc.notes }}</dd>{% endif %}
+      <dt>Source</dt><dd>{{ 'Story index' if arc.source == 'index' else 'Added by hand' }}</dd>
+    </dl>
+    {% if arc.status[1] in ('running', 'queued') %}
+      <p class="hint">A render of this story is {{ arc.status[0]|lower }}. <a href="/renders">Watch it →</a></p>
+    {% else %}
+    <div class="actions">
+      {% if arc.done and arc.done < arc.total %}
+      <form method="post" action="/arcs/{{ arc.id }}/render">
+        <input type="hidden" name="mode" value="rest">
+        <button class="primary">Render the other {{ arc.total - arc.done }}</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/arcs/{{ arc.id }}/render">
+        <input type="hidden" name="mode" value="render">
+        <button class="{{ 'primary' if not arc.done }}" {{ 'disabled' if not arc.progs }}>{{ 'Re-render all' if arc.done else 'Render all episodes' }}</button>
+      </form>
+      {% if arc.done %}
+      <form method="post" action="/arcs/{{ arc.id }}/render"
+            onsubmit="return confirm('Ask Gemini to find and read every page again? Any edits to the page scripts are lost.')">
+        <input type="hidden" name="mode" value="reread">
+        <button>Re-read pages and render</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="hint">Re-rendering reuses what Gemini read and any voices already made, so it only spends credits on
+      lines that changed. Re-reading asks Gemini to read the pages again.</p>
+    {% endif %}
+
+    <details class="edit">
+      <summary>Edit this story</summary>
+      <form method="post" action="/arcs/{{ arc.id }}/edit" class="form-grid" style="margin-top:12px">
+        <label for="title">Title</label><input id="title" type="text" name="title" value="{{ arc.title }}">
+        <label for="progs">Progs</label><input id="progs" type="text" name="progs" value="{{ format_progs(arc.progs) }}{% if arc.specials %}, {{ arc.specials }}{% endif %}">
+        <label for="season">Plex season</label><input id="season" type="number" name="season" min="1" value="{{ arc.season or '' }}" placeholder="{{ season }} (automatic)">
+        <label for="notes">Notes</label><textarea id="notes" name="notes" rows="3">{{ arc.notes }}</textarea>
+        <label class="check full"><input type="checkbox" name="hidden" {{ 'checked' if arc.hidden }}> Hide from the list</label>
+        <div class="full"><button>Save</button></div>
+      </form>
+      <p class="hint">Changing the title starts a fresh working folder, so the pages are read again.</p>
+    </details>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% if index_import.running %}
+<span hx-get="/settings/import-index" hx-trigger="every 2s" hx-swap="outerHTML" hx-target="this">
+  <span class="spinner"></span>{{ index_import.message }}
+</span>
+{% else %}
+<span>
+  <button class="primary" hx-post="/settings/import-index" hx-target="closest span" hx-swap="outerHTML">Import story index</button>
+  <button hx-post="/settings/import-index" hx-vals='{"refresh": "1"}' hx-target="closest span" hx-swap="outerHTML"
+          title="Download the latest version of the indexes from Wikimedia Commons">Download latest index</button>
+  {% if index_import.message %}<span class="hint">{{ index_import.message }} <a href="/arcs">Browse stories</a></span>{% endif %}
+</span>
+{% endif %}

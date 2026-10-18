@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="sub">Where the comics are, where episodes go, your API keys, and how episodes look and sound.</p>
+{% if saved %}<div class="notice ok">Saved.</div>{% endif %}
+
+{% set tests = {'comics_path': 'archive', 'komga_series': 'komga', 'output_path': 'output', 'gemini_api_key': 'gemini',
+                'elevenlabs_api_key': 'elevenlabs', 'comicvine_api_key': 'comicvine'} %}
+<form method="post" action="/settings">
+  {% for group, keys in groups %}
+  <fieldset>
+    <legend>{{ group }}</legend>
+    {% if group == 'API keys' %}<p class="hint" style="margin-top:0">Stored in the portal's database on this machine. Leave a box empty to keep the saved key.</p>{% endif %}
+    <div class="form-grid">
+    {% for key in keys %}
+      {% set label, default, kind = fields[key] %}
+      <label for="{{ key }}">{{ label }}</label>
+      <div class="field-row">
+        {% if kind == 'bool' %}
+          <input id="{{ key }}" type="checkbox" name="{{ key }}" {{ 'checked' if s[key] }}>
+        {% elif kind == 'secret' %}
+          <input id="{{ key }}" type="password" name="{{ key }}" autocomplete="off"
+                 placeholder="{{ ('saved ••••' ~ s[key][-4:]) if s[key] else 'not set' }}">
+        {% elif kind == 'int' %}
+          <input id="{{ key }}" type="number" name="{{ key }}" value="{{ s[key] }}">
+        {% elif kind == 'cast' %}
+          <select id="{{ key }}" name="{{ key }}">
+            {% for c in casts %}<option value="{{ c }}" {{ 'selected' if c == s[key] }}>{{ c }}</option>{% endfor %}
+          </select>
+        {% elif kind.startswith('choice:') %}
+          <select id="{{ key }}" name="{{ key }}">
+            {% for c in kind[7:].split('|') %}<option value="{{ c }}" {{ 'selected' if c == s[key] }}>{{ c }}</option>{% endfor %}
+          </select>
+        {% else %}
+          <input id="{{ key }}" type="text" name="{{ key }}" value="{{ s[key] }}" {{ 'spellcheck=false' if kind == 'path' }}>
+        {% endif %}
+        {% if key in tests %}
+          <button type="button" class="small" hx-post="/settings/test/{{ tests[key] }}" hx-target="next .test-out"
+                  title="Uses the saved value, so save first">Test</button>
+          <span class="test-out"></span>
+        {% endif %}
+      </div>
+    {% endfor %}
+    </div>
+  </fieldset>
+  {% endfor %}
+  <button class="primary">Save settings</button>
+  <span class="hint">Tests use the saved settings, so save before testing a change.</span>
+</form>
+
+<h2>Story index</h2>
+<div class="card">
+  <p style="margin-top:0">The catalogue of strips and stories comes from fan-compiled indexes of every 2000 AD prog, hosted on
+    Wikimedia Commons. Importing again adds new stories and leaves your edits alone. {{ arc_count }} stories in the catalogue now.</p>
+  <div id="import-status">{% include "_import_status.html" %}</div>
+</div>
+{% endblock %}

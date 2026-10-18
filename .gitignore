@@ -4,3 +4,4 @@ config.yaml
 __pycache__/
 *.mp4
 venv-chatterbox/
+data/

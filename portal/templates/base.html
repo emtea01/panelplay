@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PanelPlay{% endblock %} · PanelPlay</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/arcs"><span class="mark">PP</span><span class="word">PanelPlay</span></a>
+    <nav class="main">
+      <a href="/arcs" class="{{ 'on' if nav in ('arcs', 'arc', 'arc_new') }}">Story arcs</a>
+      <a href="/renders" class="{{ 'on' if nav in ('renders', 'render') }}">Renders</a>
+      <a href="/settings" class="{{ 'on' if nav == 'settings' }}">Settings</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

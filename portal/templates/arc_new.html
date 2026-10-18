@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Add a story{% endblock %}
+{% block content %}
+<p class="hint"><a href="/arcs">← Story arcs</a></p>
+<h1>Add a story</h1>
+<p class="sub">For anything the index doesn't have, or to split a long story into shorter seasons.</p>
+{% if error %}<div class="notice bad">{{ error }}</div>{% endif %}
+<form method="post" class="card form-grid">
+  <label for="strip">Strip</label>
+  <input id="strip" type="text" name="strip" list="strips" required value="{{ form.strip or '' }}" placeholder="Judge Dredd">
+  <datalist id="strips">{% for s in strips %}<option value="{{ s }}">{% endfor %}</datalist>
+  <label for="title">Story title</label>
+  <input id="title" type="text" name="title" required value="{{ form.title or '' }}" placeholder="The Robot Wars">
+  <label for="progs">Progs</label>
+  <input id="progs" type="text" name="progs" required value="{{ form.progs or '' }}" placeholder="10-17, or 245-267, 269-270">
+  <label for="notes">Notes</label>
+  <textarea id="notes" name="notes" rows="3">{{ form.notes or '' }}</textarea>
+  <div class="full"><button class="primary">Add story</button></div>
+</form>
+{% endblock %}

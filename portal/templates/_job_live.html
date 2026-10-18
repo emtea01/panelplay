@@ -1,0 +1,18 @@
+<div {% if job.status in ('queued', 'running') %}hx-get="/renders/{{ job.id }}" hx-trigger="every 2s" hx-target="#live" hx-swap="innerHTML"{% endif %}>
+  <div class="card">
+    <dl class="facts">
+      <dt>Status</dt>
+      <dd><span class="badge {{ job.status }}">{% if job.status == 'running' %}<span class="spinner"></span>{% endif %}{{ job.status }}</span>
+        {% if job.status in ('queued', 'running') %}
+        <form class="inline" method="post" action="/renders/{{ job.id }}/cancel"><button class="small">Cancel</button></form>
+        {% endif %}
+      </dd>
+      <dt>Progress</dt><dd class="progress-line">{{ job.progress or '—' }}</dd>
+      {% if job.error %}<dt>Error</dt><dd class="test bad">{{ job.error }}</dd>{% endif %}
+      <dt>Queued</dt><dd>{{ job.created|when }}</dd>
+      {% if job.started %}<dt>Time</dt><dd>{{ duration(job.started, job.finished) }}</dd>{% endif %}
+    </dl>
+  </div>
+  <h2>Log</h2>
+  <pre class="log">{{ job.log or 'Nothing yet.' }}</pre>
+</div>

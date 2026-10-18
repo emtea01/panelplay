@@ -1,0 +1,30 @@
+<div class="table-wrap">
+<table>
+  <thead><tr><th>#</th><th>Story</th><th>Status</th><th class="hide-sm">Queued</th><th class="hide-sm num">Took</th><th></th></tr></thead>
+  <tbody>
+  {% for j in jobs %}
+    <tr>
+      <td><a href="/renders/{{ j.id }}">{{ j.id }}</a></td>
+      <td class="title-cell">
+        <a href="/arcs/{{ j.arc_id }}">{{ j.title }}</a><br>
+        <span class="strip">{{ j.strip }} · {{ {'reread': 're-read and render', 'rest': 'render the rest'}.get(j.mode, 'render') }}{% if j.only_prog %}, prog {{ j.only_prog }} only{% endif %}</span>
+      </td>
+      <td>
+        <span class="badge {{ j.status }}">{% if j.status == 'running' %}<span class="spinner"></span>{% endif %}{{ j.status }}</span>
+        <div class="hint">{{ j.progress }}</div>
+        {% if j.error %}<div class="test bad">{{ j.error }}</div>{% endif %}
+      </td>
+      <td class="hide-sm hint">{{ j.created|when }}</td>
+      <td class="hide-sm num hint">{{ duration(j.started, j.finished) }}</td>
+      <td class="num">
+        {% if j.status in ('queued', 'running') %}
+        <form class="inline" method="post" action="/renders/{{ j.id }}/cancel"><button class="small">Cancel</button></form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="hint">No renders yet. Pick a story from <a href="/arcs">Story arcs</a>.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
