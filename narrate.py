@@ -44,6 +44,7 @@ def main():
     ap.add_argument("--arc", required=True, help='e.g. "The Robot Wars"')
     ap.add_argument("--progs", required=True, help='e.g. "10-17" or "10,11,14-16"')
     ap.add_argument("--season", type=int, default=1, help="Plex season number for this arc")
+    ap.add_argument("--plex", help='Plex numbers per prog instead of --season, e.g. "10=1x9,11=1x10" (prog=SxE)')
     ap.add_argument("--stage", choices=["tag", "read", "render", "all"], default="all")
     ap.add_argument("--only", help='process just these progs from the range, e.g. "10" or "11-13,15"')
     ap.add_argument("--config", default=str(HERE / "config.yaml"))
@@ -82,6 +83,11 @@ def main():
         return reader
 
     all_progs = parse_progs(args.progs)
+    plex = {}
+    for item in (args.plex or "").split(","):
+        if item.strip():
+            p, se = item.split("=")
+            plex[int(p)] = tuple(int(x) for x in se.split("x"))
     for prog in progs:
         ep = all_progs.index(prog) + 1
         pdir = arc_dir / f"prog_{prog:04d}"
@@ -154,8 +160,9 @@ def main():
         part = tag.get("part") or ep
         part_label = f"Part {part}" + (f": {tag['episode_title']}" if tag.get("episode_title") else "")
         show = safe(args.strip)
-        season_dir = Path(cfg["paths"]["plex"]) / show / f"Season {args.season:02d}"
-        out = season_dir / f"{show} - s{args.season:02d}e{ep:02d} - {safe(args.arc)} - Part {part}.mp4"
+        season, plex_ep = plex.get(prog, (args.season, ep))
+        season_dir = Path(cfg["paths"]["plex"]) / show / f"Season {season:02d}"
+        out = season_dir / f"{show} - s{season:02d}e{plex_ep:02d} - {safe(args.arc)} - Part {part}.mp4"
         season_dir.mkdir(parents=True, exist_ok=True)  # fail now, not after a long render, if it isn't writable
         print(f"  rendering -> {out}")
         total = sum(len(s["panels"]) for s in scripts)

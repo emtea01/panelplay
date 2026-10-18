@@ -54,18 +54,18 @@ templates.env.globals["format_progs"] = catalog.format_progs
 
 
 class Archive:
-    """Which progs the archive holds. Scanning a network share takes a moment, so it's cached."""
+    """Which progs the archive holds, with their years. Scanning a network share takes a moment, so it's cached."""
 
     def __init__(self):
-        self.progs, self.checked, self.error, self._key = set(), 0.0, "", None
+        self.progs, self.checked, self.error, self._key = {}, 0.0, "", None
 
-    def get(self, s, force=False) -> set:
+    def get(self, s, force=False) -> dict:
         key = (s["source"], s["comics_path"], s["komga_url"], s["komga_series"])
         if force or key != self._key or time.time() - self.checked > 900:
             try:
                 self.progs, self.error = catalog.archive_progs(s), ""
             except Exception as e:
-                self.progs, self.error = set(), f"Couldn't read the archive: {e}"
+                self.progs, self.error = {}, f"Couldn't read the archive: {e}"
             self.checked, self._key = time.time(), key
         return self.progs
 
@@ -156,15 +156,18 @@ def arc_detail(request: Request, arc_id: int):
     from narrate import slug
 
     arc_dir = Path(s["work_path"]) / f"{slug(arc['strip'])}--{slug(arc['title'])}"
+    numbers = catalog.plex_numbers(arc, db.strip_arcs(arc["strip"]), held)
     episodes = []
     for i, p in enumerate(arc["progs"], 1):
         e = eps.get(p, {})
-        episodes.append({"prog": p, "episode": i, "held": p in held, "status": e.get("status", ""),
+        se = numbers.get(p)
+        episodes.append({"prog": p, "episode": i, "held": p in held, "year": held.get(p),
+                         "plex": f"S{se[0]:02d}E{se[1]:02d}" if se else "", "status": e.get("status", ""),
                          "path": e.get("path", ""), "detail": e.get("detail", ""), "when": e.get("rendered_at"),
                          "transcript": (arc_dir / f"prog_{p:04d}" / "transcript.txt").exists(),
                          "read": (arc_dir / f"prog_{p:04d}" / "tag.json").exists()})
-    season = catalog.season_for(arc, db.strip_arcs(arc["strip"]))
-    return _render_page(request, "arc.html", arc=row, episodes=episodes, season=season,
+    seasons = sorted({se for se, _ in numbers.values()})
+    return _render_page(request, "arc.html", arc=row, episodes=episodes, seasons=seasons,
                         jobs=db.jobs(20, arc_id=arc_id), problems=S.problems(s))
 
 

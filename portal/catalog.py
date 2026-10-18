@@ -261,8 +261,12 @@ def download_and_parse(cache_dir, latest=None, prefer_cache=True) -> list[dict]:
 
 # ---------- archive & seasons ----------
 
-def archive_progs(settings: dict) -> set[int]:
-    """Prog numbers present in the archive (folder or Komga), matched the same way the renderer does."""
+FIRST_YEAR = 1977  # Plex season 1; 2000 AD's first year
+
+
+def archive_progs(settings: dict) -> dict[int, int | None]:
+    """Progs present in the archive (folder or Komga), matched the same way the renderer does,
+    mapped to their publication year (None if it can't be told)."""
     from pathlib import Path
 
     from sources import FolderSource, KomgaSource
@@ -271,19 +275,32 @@ def archive_progs(settings: dict) -> set[int]:
         src = KomgaSource({"url": settings["komga_url"], "api_key": settings["komga_api_key"],
                            "user": settings["komga_user"], "password": settings["komga_password"],
                            "series": settings["komga_series"]})
-        src._load()
-        return set(src._books)
+        return src.years()
     path = settings["comics_path"]
     if not path or not Path(path).is_dir():
-        return set()
-    src = FolderSource({"path": path})
-    src._load()
-    return set(src._files)
+        return {}
+    return FolderSource({"path": path}).years()
 
 
-def season_for(arc: dict, strip_arcs: list[dict]) -> int:
-    """Plex season: the override, else the arc's position among its strip's arcs in publication order."""
+def plex_numbers(arc: dict, strip_arcs: list[dict], years: dict) -> dict[int, tuple[int, int]]:
+    """Plex (season, episode) for each of the arc's progs.
+
+    A season is a year of publication (1977 = season 1), and its episodes are every episode of the
+    strip that year in prog order, so one-offs and multi-part stories sit together as they appeared.
+    A season set by hand on the story overrides this: the story becomes that season on its own.
+    Progs whose year isn't known (not in the archive) get no number."""
     if arc.get("season"):
-        return arc["season"]
-    ordered = sorted(strip_arcs, key=lambda a: (a["progs"][0] if a["progs"] else 10**6, a["id"]))
-    return next(i for i, a in enumerate(ordered, 1) if a["id"] == arc["id"])
+        return {p: (arc["season"], i) for i, p in enumerate(arc["progs"], 1)}
+    by_year: dict[int, list] = {}
+    for a in strip_arcs:
+        if a.get("hidden") or a.get("season"):
+            continue
+        for p in a["progs"]:
+            if years.get(p):
+                by_year.setdefault(years[p], []).append((p, a["progs"][0], a["id"]))
+    out = {}
+    for year, entries in by_year.items():
+        for i, (p, _, aid) in enumerate(sorted(entries), 1):
+            if aid == arc["id"]:
+                out[p] = (year - FIRST_YEAR + 1, i)
+    return out

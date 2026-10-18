@@ -49,6 +49,12 @@ class KomgaSource:
             if n is not None:
                 self._books.setdefault(n, b)
 
+    def years(self):
+        """Publication year of each prog: Komga's release date, else a "(1977)" in the name."""
+        self._load()
+        return {n: _year(b.get("metadata", {}).get("releaseDate") or "", b.get("name", ""))
+                for n, b in self._books.items()}
+
     def prog(self, n):
         self._load()
         if n not in self._books:
@@ -90,6 +96,11 @@ class FolderSource:
             if n is not None:
                 self._files.setdefault(n, f)
 
+    def years(self):
+        """Publication year of each prog, from a "(1977)" in its file name."""
+        self._load()
+        return {n: _year(f.stem) for n, f in self._files.items()}
+
     def prog(self, n):
         self._load()
         if n not in self._files:
@@ -121,6 +132,14 @@ class FolderSource:
 
 def _natural(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
+
+
+def _year(*candidates):
+    for c in candidates:
+        m = re.search(r"(?:^|\()((?:19|20)\d\d)(?:\)|-)", c or "")
+        if m:
+            return int(m.group(1))
+    return None
 
 
 def _prog_number(number, name):

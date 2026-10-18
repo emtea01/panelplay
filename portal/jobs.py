@@ -78,7 +78,7 @@ class Runner:
                           finished=time.time())
             return
 
-        season = catalog.season_for(arc, db.strip_arcs(arc["strip"]))
+        numbers = catalog.plex_numbers(arc, db.strip_arcs(arc["strip"]), catalog.archive_progs(s))
         work = Path(s["work_path"])
         from narrate import slug
 
@@ -97,12 +97,14 @@ class Runner:
         cmd = [sys.executable, "-u", str(S.ROOT / "narrate.py"), "--events",
                "--strip", arc["strip"], "--arc", arc["title"],
                "--progs", catalog.format_progs(arc["progs"]).replace(" ", ""),
-               "--season", str(season), "--config", str(cfg_file), "--cast", str(S.ROOT / s["cast_file"])]
+               "--plex", ",".join(f"{p}={se}x{e}" for p, (se, e) in numbers.items()),
+               "--config", str(cfg_file), "--cast", str(S.ROOT / s["cast_file"])]
         if job["only_prog"] or job["mode"] == "rest":
             cmd += ["--only", catalog.format_progs(progs).replace(" ", "")]
 
         db.update_job(jid, status="running", started=time.time(), progress="starting", log="", error="")
-        db.append_log(jid, f"Season {season}, progs {catalog.format_progs(progs)}\n")
+        db.append_log(jid, "Progs " + ", ".join(
+            f"{p} (s{numbers[p][0]:02d}e{numbers[p][1]:02d})" if p in numbers else str(p) for p in progs) + "\n")
         self.proc = subprocess.Popen(cmd, cwd=S.ROOT, env={**os.environ, **S.renderer_env(s)},
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      encoding="utf-8", errors="replace")

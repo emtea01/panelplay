@@ -111,5 +111,6 @@ cached index PDFs, and per-render configs. On first start the portal borrows `co
 `GEMINI_API_KEY` / `ELEVENLABS_API_KEY` environment variables if present. API keys are stored in plain text in
 the database, and the portal has no login, so keep it on your LAN.
 
-Plex seasons are numbered by a story's position within its strip (Robot Wars is Judge Dredd season 9); set a
-season by hand on the story's page to override.
+Plex seasons are years of publication (1977 is season 1), holding every episode of the strip that year in prog
+order, one-offs and multi-part stories together: Robot Wars part 1 (prog 10) is Judge Dredd s01e09. Set a season
+by hand on a story's page to give that story a season of its own.
