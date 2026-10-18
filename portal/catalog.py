@@ -15,7 +15,7 @@ INDEX_URLS = {
     "dredd": "https://upload.wikimedia.org/wikipedia/commons/5/56/Index_of_Judge_Dredd_stories_in_British_comic_2000AD.pdf",
 }
 # Wikimedia asks automated clients to identify themselves.
-USER_AGENT = "PanelPlay/0.1 (self-hosted home media tool; turns a personal 2000 AD archive into narrated episodes) python-requests"
+USER_AGENT = "PanelPlay/0.1 (https://github.com/emtea01/panelplay; self-hosted home media tool) python-requests"
 # Comic Vine blocks any user agent naming python-requests as a scraper.
 CV_USER_AGENT = USER_AGENT.removesuffix(" python-requests")
 
