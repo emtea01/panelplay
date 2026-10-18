@@ -114,6 +114,8 @@ def _is_caps(text: str) -> bool:
     return len(letters) >= 3 and sum(ch.isupper() for ch in letters) / len(letters) > 0.85
 
 
+# Index rows that point elsewhere ("Strontium Dog first appeared in Starlord no. 1") rather than list a story.
+NOTE_ROW = re.compile(r"(?i)\b(first appeared in|see also|episode in|story features)\b|\b(no\.|vol\.|in)$")
 _PROG_WORD = re.compile(r"(?i)^(prog|\d{1,4}(-(\d{1,4}|ongoing))?,?|-|and|&)$")
 _NOTE_START = re.compile(r"(?i)^(note|notes|see also|story continues|characters?|spin-off|also|continued|"
                          r"[a-z]+ (first|also) appeared|this|these|published|reprinted|\()")
@@ -166,7 +168,7 @@ def parse_series_index(pdf, latest=None) -> list[dict]:
             if not title or series.upper().startswith("JUDGE DREDD"):
                 continue
             progs, specials = parse_progs(spec, latest)
-            if progs or specials:
+            if (progs or specials) and not NOTE_ROW.search(title):
                 arcs.append({"strip": series, "title": title.strip(" -"), "progs": progs,
                              "specials": ", ".join(specials), "source": "index"})
     return arcs

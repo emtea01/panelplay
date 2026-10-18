@@ -347,6 +347,9 @@ def _import_index(refresh=False):
                                           prefer_cache=not refresh)
         with db.conn() as c:
             new = sum(db.upsert_arc(c, {**a, "series_id": main["id"]}) for a in arcs)
+        # Rows from earlier imports that were notes, not stories.
+        db.delete_unused_arcs([a["id"] for a in db.arcs(include_hidden=True, series_id=main["id"])
+                               if a["source"] == "index" and catalog.NOTE_ROW.search(a["title"])])
         index_import.update(message=f"Imported {len(arcs)} stories ({new} new).")
     except Exception as e:
         index_import.update(message=f"Import failed: {e}")

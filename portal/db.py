@@ -230,6 +230,12 @@ class DB:
         with self.conn() as c:
             return [_arc(r) for r in c.execute("SELECT * FROM arcs WHERE strip = ? COLLATE NOCASE", (strip,))]
 
+    def delete_unused_arcs(self, ids):
+        """Remove catalogue rows (never ones that have been rendered or queued)."""
+        with self.conn() as c:
+            c.executemany("DELETE FROM arcs WHERE id = ? AND id NOT IN (SELECT arc_id FROM jobs) "
+                          "AND id NOT IN (SELECT arc_id FROM episodes)", [(i,) for i in ids])
+
     def delete_arcs(self, series_id: int, source: str):
         """Forget a series' stories from one source, except ones that have been rendered or queued."""
         with self.conn() as c:
