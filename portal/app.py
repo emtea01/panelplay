@@ -79,7 +79,14 @@ def _scan():
         found = library.scan(S.current(db))
         db.save_scan(found)
         n = sum(len(f["issues"]) for f in found)
-        library_scan.update(message=f"Found {len(found)} series, {n} issues.")
+        library_scan.update(message=f"Found {len(found)} series, {n} issues. Looking in the Plex folder…")
+        from portal import plexscan
+
+        try:
+            plex = plexscan.find_episodes(db, S.current(db)["output_path"])
+        except OSError as e:
+            plex = f"Couldn't look in the Plex folder: {e}"
+        library_scan.update(message=f"Found {len(found)} series, {n} issues. {plex}".strip())
     except BaseException as e:  # SystemExit from the scanner carries a readable message
         library_scan.update(message=f"Couldn't scan the library: {e}")
     finally:

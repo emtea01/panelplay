@@ -102,6 +102,8 @@ python -m portal            # http://127.0.0.1:8077   (PANELPLAY_HOST=0.0.0.0 to
     titles, part numbers and pages (one call per issue, cached; the daily limit pauses it and finding stories
     again carries on). Episodes are linked into stories across issues, and a render reuses the pages found.
     Set a series to *Anthology* or *One story per issue* if the automatic guess is wrong.
+  A rescan also looks in the Plex folder (only in folders named after a strip) and marks episodes already
+  there as rendered, so a new install picks up earlier renders.
 - **Story arcs**: the catalogue. Filter by strip, series or status, search, show only stories your library
   holds, and render or re-render. Stories can be added or edited by hand (including which strip, i.e. Plex
   show, they belong to).
