@@ -111,9 +111,11 @@ class Indexer:
             time.sleep(wait)
         self._last_cv = time.time()
         r = requests.get(f"{CV_API}/{path}", params={"api_key": s["comicvine_api_key"], "format": "json", **params},
-                         headers={"User-Agent": catalog.USER_AGENT}, timeout=60)
-        r.raise_for_status()
-        data = r.json()
+                         headers={"User-Agent": catalog.CV_USER_AGENT}, timeout=60)
+        try:
+            data = r.json()
+        except ValueError:
+            raise RuntimeError(f"Comic Vine HTTP {r.status_code}: not a JSON reply")
         if data.get("status_code") != 1:
             raise RuntimeError(f"Comic Vine: {data.get('error', 'error')}")
         if cache:

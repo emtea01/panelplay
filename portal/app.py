@@ -400,8 +400,11 @@ def test_setting(what: str):
             r = requests.get("https://comicvine.gamespot.com/api/search/",
                              params={"api_key": s["comicvine_api_key"], "format": "json", "query": "2000 AD",
                                      "resources": "volume", "limit": 1},
-                             headers={"User-Agent": catalog.USER_AGENT}, timeout=20)
-            data = r.json()
+                             headers={"User-Agent": catalog.CV_USER_AGENT}, timeout=20)
+            try:
+                data = r.json()
+            except ValueError:
+                data = {"error": f"HTTP {r.status_code}: Comic Vine didn't send a JSON reply"}
             ok = data.get("status_code") == 1
             msg = "Working." if ok else data.get("error", f"HTTP {r.status_code}")
         elif what == "komga":

@@ -16,6 +16,8 @@ INDEX_URLS = {
 }
 # Wikimedia asks automated clients to identify themselves.
 USER_AGENT = "PanelPlay/0.1 (self-hosted home media tool; turns a personal 2000 AD archive into narrated episodes) python-requests"
+# Comic Vine blocks any user agent naming python-requests as a scraper.
+CV_USER_AGENT = USER_AGENT.removesuffix(" python-requests")
 
 # ---------- prog ranges ----------
 
