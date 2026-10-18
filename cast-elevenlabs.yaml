@@ -1,0 +1,26 @@
+# Everyone on ElevenLabs (use with --cast cast-elevenlabs.yaml). Voices are ElevenLabs voice IDs:
+# the built-in ("premade") voices plus your own designed ones work on the free API.
+# fx: robot | radio | none.  Lines are cached in work/tts_cache, so re-renders don't spend credits.
+engine: elevenlabs
+
+narrator:
+  voice: JBFqnCBsd6RMkjVDRZzb        # George - warm British storyteller
+
+characters:
+  Judge Dredd:     {voice: 3AB4DRkXNpzdWya4NGLV}             # old cop (designed)
+  Call-Me-Kenneth: {voice: N2lVS1w4EtoT3dr4eOWO, fx: robot}  # Callum - husky trickster
+  Walter:          {voice: onwK4e9ZLuTAKqWW03F9, fx: robot}  # Daniel - steady British broadcaster
+
+# Anyone not listed gets a voice from these pools, picked consistently by name.
+# Assignments are saved to work/cast-elevenlabs_assigned.yaml so you can tweak them later.
+pools:
+  # Roger, Chris, Eric, Will, Liam, Adam, Bill, Harry
+  male:    [CwhRBWXzGAHq8TQ4Fs17, iP95p4xoKVk53GoZ742B, cjVigY5qzO86Huf0OWal, bIHbv24MWmeRgasZH58o,
+            TX3LPaxmHKxFdv7VOQHJ, pNInz6obpgDQGcFmaJgB, pqHfZKP75CvOlQylNhV4, SOYHLrjzK2X1ezoPC6cr]
+  # Sarah, Bella, Matilda, Lily, Alice, Jessica, Laura
+  female:  [EXAVITQu4vr4xnSDxMaL, hpp4J3VqNfWAUOO0d1Us, XrExE9yKIg1WjnnlVkGX, pFZP5JQG7iQjIQuC4Bku,
+            Xb7hH8MSUJpSbSDYk0k2, cgSgspJ2msm6clMCkdW9, FGY2WhTYpPnrIDTdsKH5]
+  # Adam, Harry, Roger (robot effect added automatically)
+  robot:   [pNInz6obpgDQGcFmaJgB, SOYHLrjzK2X1ezoPC6cr, CwhRBWXzGAHq8TQ4Fs17]
+  # Roger, Chris, Eric
+  unknown: [CwhRBWXzGAHq8TQ4Fs17, iP95p4xoKVk53GoZ742B, cjVigY5qzO86Huf0OWal]

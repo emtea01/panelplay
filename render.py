@@ -1,5 +1,6 @@
 """Turn page scripts + voices into an episode MP4: panel-by-panel, with a slow zoom."""
 import io
+import shutil
 import subprocess
 import wave
 from pathlib import Path
@@ -159,8 +160,11 @@ class Renderer:
         lst = seg_dir / "list.txt"
         lst.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in segs), encoding="utf-8")
         out_file.parent.mkdir(parents=True, exist_ok=True)
+        # Build locally, then move: +faststart rewrites the file in place, which network shares can refuse.
+        tmp = seg_dir / "episode.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
-                        "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(out_file)], check=True)
+                        "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(tmp)], check=True)
+        shutil.move(str(tmp), str(out_file))
         for p in segs:
             p.unlink()
         lst.unlink()

@@ -15,6 +15,7 @@ DELIVERY_GAIN = {"normal": 1.0, "shout": 1.15, "whisper": 0.7, "radio": 0.95}
 class Cast:
     def __init__(self, cast_file: Path, assigned_file: Path):
         data = yaml.safe_load(cast_file.read_text(encoding="utf-8"))
+        self.engine = data.get("engine")  # default engine for every entry that doesn't name one
         self.narrator = data["narrator"]
         self.characters = {k.lower(): v for k, v in (data.get("characters") or {}).items()}
         self.names = list((data.get("characters") or {}).keys())
@@ -25,6 +26,10 @@ class Cast:
             self.assigned = {k.lower(): v for k, v in (yaml.safe_load(assigned_file.read_text(encoding="utf-8")) or {}).items()}
 
     def voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
+        v = self._voice_for(speaker, speaker_type, kind)
+        return {"engine": self.engine, **v} if self.engine else v
+
+    def _voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
         if kind == "caption" or speaker.lower() in ("narrator", "caption"):
             return self.narrator
         key = speaker.lower().strip()

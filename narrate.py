@@ -65,7 +65,7 @@ def main():
     from voices import Cast, make_tts
 
     source = make_source(cfg)
-    cast = Cast(Path(args.cast), work / "cast_assigned.yaml")
+    cast = Cast(Path(args.cast), work / f"{Path(args.cast).stem}_assigned.yaml")
     reader = None
 
     def get_reader():
