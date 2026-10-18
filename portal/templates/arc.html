@@ -3,7 +3,7 @@
 {% block content %}
 <p class="hint"><a href="/arcs?strip={{ arc.strip|urlencode }}">← {{ arc.strip }}</a></p>
 <h1>{{ arc.title }}</h1>
-<p class="sub">{{ arc.strip }} · progs {{ format_progs(arc.progs) or '—' }}{% if arc.specials %} + {{ arc.specials }}{% endif %}{% if seasons %} · Plex season{{ 's' if seasons|length > 1 }} {{ seasons|join(', ') }}{% endif %}</p>
+<p class="sub">{{ arc.strip }} · {{ series_label(series) }}{% if is_main_series(series) %} progs{% else %} issues{% endif %} {{ format_progs(arc.progs) or '—' }}{% if arc.specials %} + {{ arc.specials }}{% endif %}{% if seasons %} · Plex season{{ 's' if seasons|length > 1 }} {{ seasons|join(', ') }}{% endif %}</p>
 
 {% if problems %}
 <div class="notice"><strong>Before you can render:</strong>
@@ -20,19 +20,19 @@
     <h2 style="margin-top:0">Episodes</h2>
     <div class="table-wrap">
     <table>
-      <thead><tr><th class="num">Part</th><th>Prog</th><th>Plex</th><th>Status</th><th class="hide-sm">Rendered</th><th></th></tr></thead>
+      <thead><tr><th class="num">Part</th><th>Issue</th><th>Plex</th><th>Status</th><th class="hide-sm">Rendered</th><th></th></tr></thead>
       <tbody>
       {% for e in episodes %}
         <tr>
           <td class="num">{{ e.episode }}</td>
-          <td class="progs">{{ e.prog }}</td>
+          <td class="progs">{{ e.label }}</td>
           <td class="progs">{{ e.plex or '—' }}{% if e.year %} <span class="hint">{{ e.year }}</span>{% endif %}</td>
           <td>
-            {% if not e.held %}<span class="badge missing">not in archive</span>
+            {% if not e.held %}<span class="badge missing">not in library</span>
             {% elif e.status == 'rendered' %}<span class="badge done">rendered</span>
             {% elif e.status == 'failed' %}<span class="badge failed" title="{{ e.detail }}">failed</span>
             {% elif e.status == 'strip_not_found' %}<span class="badge bad" title="{{ e.detail }}">strip not found</span>
-            {% elif e.status == 'not_found' %}<span class="badge missing">not in archive</span>
+            {% elif e.status == 'not_found' %}<span class="badge missing">not in library</span>
             {% elif e.read %}<span class="badge">pages read</span>
             {% else %}<span class="badge">—</span>{% endif %}
             {% if e.path %}<div class="path">{{ e.path }}</div>{% endif %}
@@ -76,10 +76,10 @@
   <aside class="card">
     <dl class="facts">
       <dt>Status</dt><dd><span class="badge {{ arc.status[1] }}">{{ arc.status[0] }}</span></dd>
-      <dt>Episodes</dt><dd>{{ arc.total }}{% if arc.missing %} ({{ arc.missing|length }} not in archive){% endif %}</dd>
+      <dt>Episodes</dt><dd>{{ arc.total }}{% if arc.missing %} ({{ arc.missing|length }} not in library){% endif %}</dd>
       {% if arc.credits %}<dt>Credits</dt><dd>{{ arc.credits }}</dd>{% endif %}
       {% if arc.notes %}<dt>Notes</dt><dd>{{ arc.notes }}</dd>{% endif %}
-      <dt>Source</dt><dd>{{ 'Story index' if arc.source == 'index' else 'Added by hand' }}</dd>
+      <dt>Source</dt><dd>{{ {'index': 'The 2000 AD story index', 'comicvine': 'Comic Vine', 'gemini': 'Found by Gemini'}.get(arc.source, 'Added by hand') }}</dd>
     </dl>
     {% if arc.status[1] in ('running', 'queued') %}
       <p class="hint">A render of this story is {{ arc.status[0]|lower }}. <a href="/renders">Watch it →</a></p>
@@ -110,14 +110,15 @@
     <details class="edit">
       <summary>Edit this story</summary>
       <form method="post" action="/arcs/{{ arc.id }}/edit" class="form-grid" style="margin-top:12px">
+        <label for="strip">Strip (Plex show)</label><input id="strip" type="text" name="strip" value="{{ arc.strip }}">
         <label for="title">Title</label><input id="title" type="text" name="title" value="{{ arc.title }}">
-        <label for="progs">Progs</label><input id="progs" type="text" name="progs" value="{{ format_progs(arc.progs) }}{% if arc.specials %}, {{ arc.specials }}{% endif %}">
+        <label for="progs">Issues</label><input id="progs" type="text" name="progs" value="{{ format_progs(arc.progs) }}{% if arc.specials %}, {{ arc.specials }}{% endif %}">
         <label for="season">Plex season</label><input id="season" type="number" name="season" min="1" value="{{ arc.season or '' }}" placeholder="automatic: by year">
         <label for="notes">Notes</label><textarea id="notes" name="notes" rows="3">{{ arc.notes }}</textarea>
         <label class="check full"><input type="checkbox" name="hidden" {{ 'checked' if arc.hidden }}> Hide from the list</label>
         <div class="full"><button>Save</button></div>
       </form>
-      <p class="hint">Changing the title starts a fresh working folder, so the pages are read again.</p>
+      <p class="hint">Changing the strip or title starts a fresh working folder, so the pages are read again.</p>
     </details>
   </aside>
 </div>

@@ -10,12 +10,12 @@ ROOT = Path(__file__).resolve().parent.parent  # the panelplay folder (renderer 
 FIELDS = {
     # Library
     "source":            ("Comics come from", "folder", "choice:folder|komga"),
-    "comics_path":       ("Comics folder (the 2000 AD progs)", "", "path"),
+    "comics_path":       ("Comics library (the root folder: each series in a folder of its own)", "", "path"),
     "komga_url":         ("Komga URL", "http://komga.lan:25600", "text"),
     "komga_api_key":     ("Komga API key", "", "secret"),
     "komga_user":        ("Komga user (if no API key)", "", "text"),
     "komga_password":    ("Komga password", "", "secret"),
-    "komga_series":      ("Komga series name", "2000 AD", "text"),
+    "komga_series":      ("Only this Komga series (blank = every series)", "", "text"),
     "output_path":       ("Write finished episodes to (a Plex TV library folder)", "", "path"),
     "work_path":         ("Working folder (page scripts, voice cache)", "", "path"),
     # Keys
@@ -117,13 +117,17 @@ def parse_form(form: dict, existing: dict) -> dict:
     return out
 
 
-def renderer_config(s: dict) -> dict:
-    """The config.yaml the renderer expects. API keys are passed separately, as environment variables."""
+def renderer_config(s: dict, series: dict) -> dict:
+    """The config.yaml the renderer expects, for one series. API keys are passed separately, as environment
+    variables."""
+    key = series["key"]
     return {
         "source": s["source"],
         "komga": {"url": s["komga_url"], "api_key": s["komga_api_key"], "user": s["komga_user"],
-                  "password": s["komga_password"], "series": s["komga_series"]},
-        "folder": {"path": s["comics_path"], "prog_regex": ""},
+                  "password": s["komga_password"], "series": series["name"],
+                  "series_id": key.split(":", 1)[1] if key.startswith("komga:") else ""},
+        "folder": {"path": str(Path(s["comics_path"]) / key) if key != "." else s["comics_path"], "prog_regex": "",
+                   "unpack_dir": str(Path(s["work_path"]) / "unpacked")},
         "gemini": {"api_key": "", "tag_model": s["gemini_tag_model"], "read_model": s["gemini_read_model"],
                    "requests_per_minute": s["gemini_rpm"]},
         "tts": {"engine": s["tts_engine"]},
@@ -148,7 +152,7 @@ def problems(s: dict) -> list[str]:
     """What still needs setting before a render can run."""
     out = []
     if s["source"] == "folder" and not (s["comics_path"] and Path(s["comics_path"]).is_dir()):
-        out.append("Set the comics folder (Settings → Library).")
+        out.append("Set the comics library folder (Settings → Library).")
     if s["source"] == "komga" and not s["komga_url"]:
         out.append("Set the Komga URL (Settings → Library).")
     if not s["output_path"]:

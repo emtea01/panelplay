@@ -2,23 +2,29 @@
 {% block title %}Story arcs{% endblock %}
 {% block content %}
 <h1>Story arcs</h1>
-<p class="sub">Pick a story to narrate. Each prog becomes an episode of its strip in Plex, with a season for each year of publication.</p>
+<p class="sub">Pick a story to narrate. Each issue becomes an episode in Plex: one show per strip, whichever titles it
+  ran in, with a season for each year of publication.</p>
 
 {% if problems %}
 <div class="notice"><strong>Before you can render:</strong>
   <ul>{% for p in problems %}<li><a href="/settings">{{ p }}</a></li>{% endfor %}</ul>
 </div>
 {% endif %}
-{% if archive_error %}<div class="notice bad">{{ archive_error }}</div>{% endif %}
 
 {% if not any_arcs %}
 <div class="card">
   <h2 style="margin-top:0">No stories yet</h2>
-  <p>Import the 2000 AD story index (every series and story, with their prog numbers), or add a story yourself.</p>
+  {% if not any_series %}
+  <p>First, find what's in your comics library{% if library_scan.running %} (scanning now){% endif %}.</p>
+  <div class="actions"><a class="btn primary" href="/library">Library</a></div>
+  {% else %}
+  <p>Find the stories in each series on the <a href="/library">Library</a> page (2000 AD has a published story
+    index), or add a story yourself.</p>
   <div class="actions">
-    <div id="import-status">{% include "_import_status.html" %}</div>
+    <a class="btn primary" href="/library">Library</a>
     <a class="btn" href="/arcs/new">Add a story</a>
   </div>
+  {% endif %}
 </div>
 {% else %}
 <form class="filters" hx-get="/arcs" hx-target="#arc-table" hx-trigger="input changed delay:300ms from:input[type=search], change"
@@ -27,6 +33,10 @@
     <option value="">All strips</option>
     {% for s in strips %}<option value="{{ s }}" {{ 'selected' if s == strip }}>{{ s }}</option>{% endfor %}
   </select>
+  <select name="series" aria-label="Series">
+    <option value="">All series</option>
+    {% for sr in series_list %}{% if sr.arc_count %}<option value="{{ sr.id }}" {{ 'selected' if sr.id|string == series }}>{{ series_label(sr) }}</option>{% endif %}{% endfor %}
+  </select>
   <input type="search" name="q" value="{{ q }}" placeholder="Search titles, credits, notes" aria-label="Search">
   <select name="status" aria-label="Status">
     <option value="">Any status</option>
@@ -34,7 +44,7 @@
     <option value="rendered" {{ 'selected' if status == 'rendered' }}>Rendered</option>
     <option value="active" {{ 'selected' if status == 'active' }}>Queued or rendering</option>
   </select>
-  <label class="check"><input type="checkbox" name="available" value="1" {{ 'checked' if available }}> In my archive</label>
+  <label class="check"><input type="checkbox" name="available" value="1" {{ 'checked' if available }}> In my library</label>
   <a class="btn" href="/arcs/new">Add a story</a>
 </form>
 <div id="arc-table">{% include "_arc_table.html" %}</div>

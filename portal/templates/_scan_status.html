@@ -1,0 +1,11 @@
+{% if library_scan.running %}
+<span hx-get="/library/scan" hx-trigger="every 2s" hx-swap="outerHTML" hx-target="this">
+  <span class="spinner"></span>{{ library_scan.message }}
+</span>
+{% else %}
+<span>
+  <button hx-post="/library/scan" hx-target="closest span" hx-swap="outerHTML"
+          title="Look for new series and issues in the comics library">Rescan library</button>
+  {% if library_scan.message %}<span class="hint">{{ library_scan.message }} <a href="/library">Refresh</a></span>{% endif %}
+</span>
+{% endif %}

@@ -15,7 +15,7 @@ INSTALL_KOKORO="${INSTALL_KOKORO:-0}"
 
 echo ">> System packages..."
 apt-get update -qq
-PKGS="python3 python3-venv python3-pip ffmpeg fonts-dejavu-core git curl ca-certificates"
+PKGS="python3 python3-venv python3-pip ffmpeg fonts-dejavu-core libarchive-tools git curl ca-certificates"
 [ "$INSTALL_KOKORO" = "1" ] && PKGS="$PKGS espeak-ng"
 # shellcheck disable=SC2086
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PKGS

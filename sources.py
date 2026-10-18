@@ -1,5 +1,6 @@
 """Where the comic pages come from: Komga's API, or CBZ files in a folder."""
 import io
+import os
 import re
 import zipfile
 from pathlib import Path
@@ -21,7 +22,8 @@ def _thumb(data: bytes, max_side: int = 400) -> bytes:
 class KomgaSource:
     def __init__(self, cfg):
         self.url = cfg["url"].rstrip("/")
-        self.series_name = cfg["series"]
+        self.series_name = cfg.get("series", "")
+        self.series_id = cfg.get("series_id", "")
         self.s = requests.Session()
         if cfg.get("api_key"):
             self.s.headers["X-API-Key"] = cfg["api_key"]
@@ -37,11 +39,13 @@ class KomgaSource:
     def _load(self):
         if self._books is not None:
             return
-        series = self._get("/api/v1/series", search=self.series_name, size=50).json()["content"]
-        exact = [s for s in series if s["name"].lower() == self.series_name.lower()]
-        if not (exact or series):
-            raise SystemExit(f"Komga series '{self.series_name}' not found")
-        sid = (exact or series)[0]["id"]
+        sid = self.series_id
+        if not sid:
+            series = self._get("/api/v1/series", search=self.series_name, size=50).json()["content"]
+            exact = [s for s in series if s["name"].lower() == self.series_name.lower()]
+            if not (exact or series):
+                raise SystemExit(f"Komga series '{self.series_name}' not found")
+            sid = (exact or series)[0]["id"]
         books = self._get(f"/api/v1/series/{sid}/books", unpaged="true").json()["content"]
         self._books = {}
         for b in books:
@@ -76,52 +80,109 @@ class KomgaSource:
         return self._get(f"/api/v1/books/{book['id']}/thumbnail").content
 
 
+COMIC_EXT = (".cbz", ".cbr", ".cb7", ".zip", ".rar")
+
+
+def comic_files(folder: Path) -> dict:
+    """{issue number: file} for the comics directly inside a series folder (subfolders are other series).
+    A lone file without a number (a one-off special) counts as issue 1."""
+    files = sorted(f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in COMIC_EXT)
+    out = {}
+    for f in files:
+        n = _prog_number(None, f.stem)
+        if n is None and len(files) == 1:
+            n = 1
+        if n is not None:
+            out.setdefault(n, f)
+    return out
+
+
+class Comic:
+    """The page images of one comic file. CBZ is read in place; CBR/CB7 are unpacked once with bsdtar
+    (libarchive, which reads RAR and 7z) into a cache folder."""
+
+    def __init__(self, path: Path, cache_dir: Path | None = None):
+        self.path = Path(path)
+        with open(self.path, "rb") as f:
+            self.zip = f.read(4) == b"PK"
+        if self.zip:
+            with zipfile.ZipFile(self.path) as z:
+                names = z.namelist()
+        else:
+            self.dir = _unpack(self.path, cache_dir)
+            names = [x.relative_to(self.dir).as_posix() for x in self.dir.rglob("*") if x.is_file()]
+        self.pages = sorted((x for x in names if x.lower().endswith(IMAGE_EXT) and not x.startswith("__MACOSX")),
+                            key=_natural)
+
+    def read(self, name: str) -> bytes:
+        if self.zip:
+            with zipfile.ZipFile(self.path) as z:
+                return z.read(name)
+        return (self.dir / name).read_bytes()
+
+
+def _unpack(path: Path, cache_dir: Path | None) -> Path:
+    import hashlib
+    import shutil
+    import subprocess
+    import tempfile
+
+    st = path.stat()
+    key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime}".encode()).hexdigest()[:16]
+    out = Path(cache_dir or Path(tempfile.gettempdir()) / "panelplay-unpacked") / key
+    if not (out / ".done").exists():
+        tool = shutil.which("bsdtar")
+        if not tool and os.name == "nt":  # Windows' own tar is bsdtar (not Git's GNU tar, which may come first on PATH)
+            tool = str(Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32" / "tar.exe")
+        if not tool or not Path(tool).exists():
+            raise SystemExit(f"Can't open {path.name}: install bsdtar (Debian: apt install libarchive-tools)")
+        shutil.rmtree(out, ignore_errors=True)
+        out.mkdir(parents=True)
+        subprocess.run([tool, "-xf", str(path), "-C", str(out)], check=True, capture_output=True)
+        (out / ".done").touch()
+    return out
+
+
 class FolderSource:
+    """One series folder of CBZ/CBR files, numbered from their file names."""
+
     def __init__(self, cfg):
         self.root = Path(cfg["path"])
         rx = cfg.get("prog_regex")
         self.rx = re.compile(rx) if rx else None
+        self.cache_dir = cfg.get("unpack_dir")
         self._files = None
 
     def _load(self):
         if self._files is not None:
             return
-        self._files = {}
-        for f in sorted(self.root.rglob("*.cb[zZ]")):
-            if self.rx:
+        if self.rx:
+            self._files = {}
+            for f in sorted(self.root.iterdir()):
                 m = self.rx.search(f.stem)
-                n = int(m.group(1)) if m else None
-            else:
-                n = _prog_number(None, f.stem)
-            if n is not None:
-                self._files.setdefault(n, f)
+                if m and f.suffix.lower() in COMIC_EXT:
+                    self._files.setdefault(int(m.group(1)), f)
+        else:
+            self._files = comic_files(self.root)
 
     def years(self):
-        """Publication year of each prog, from a "(1977)" in its file name."""
+        """Publication year of each issue, from a "(1977)" in its file name."""
         self._load()
         return {n: _year(f.stem) for n, f in self._files.items()}
 
     def prog(self, n):
         self._load()
         if n not in self._files:
-            raise SystemExit(f"Prog {n} not found under {self.root}")
-        path = self._files[n]
-        with zipfile.ZipFile(path) as z:
-            names = sorted(
-                (x for x in z.namelist() if x.lower().endswith(IMAGE_EXT) and not x.startswith("__MACOSX")),
-                key=_natural,
-            )
-        return {"path": path, "pages": names}
+            raise SystemExit(f"Issue {n} not found under {self.root}")
+        return Comic(self._files[n], self.cache_dir)
 
     def page_count(self, book):
-        return len(book["pages"])
+        return len(book.pages)
 
     def page(self, book, i):
-        name = book["pages"][i - 1]
-        with zipfile.ZipFile(book["path"]) as z:
-            data = z.read(name)
+        name = book.pages[i - 1]
         ext = name.rsplit(".", 1)[-1].lower()
-        return data, {"jpg": "image/jpeg"}.get(ext, f"image/{ext}")
+        return book.read(name), {"jpg": "image/jpeg"}.get(ext, f"image/{ext}")
 
     def thumbnail(self, book, i):
         return _thumb(self.page(book, i)[0])

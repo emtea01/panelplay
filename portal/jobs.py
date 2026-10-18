@@ -74,15 +74,17 @@ class Runner:
                 db.update_job(jid, status="done", progress="Every episode was already rendered.", finished=time.time())
                 return
         if not arc["progs"]:
-            db.update_job(jid, status="failed", error="This arc has no prog numbers the archive can hold.",
+            db.update_job(jid, status="failed", error="This arc has no issue numbers the library can hold.",
+                          finished=time.time())
+            return
+        series = db.series(arc["series_id"]) if arc["series_id"] else None
+        if not series:
+            db.update_job(jid, status="failed", error="This story's title isn't in the library (Library → Rescan).",
                           finished=time.time())
             return
 
-        numbers = catalog.plex_numbers(arc, db.strip_arcs(arc["strip"]), catalog.archive_progs(s))
-        work = Path(s["work_path"])
-        from narrate import slug
-
-        arc_dir = work / f"{slug(arc['strip'])}--{slug(arc['title'])}"
+        numbers = catalog.plex_numbers(arc, db.strip_arcs(arc["strip"]), catalog.issue_order(db.issues()))
+        arc_dir = catalog.work_dir(s["work_path"], arc, series)
         if job["mode"] == "reread":
             # Forget what Gemini read, so the pages are found and read again. Voices stay cached.
             for p in progs:
@@ -93,9 +95,9 @@ class Runner:
         run_dir = S.data_dir() / "runs"
         run_dir.mkdir(parents=True, exist_ok=True)
         cfg_file = run_dir / f"job_{jid}.yaml"
-        cfg_file.write_text(yaml.safe_dump(S.renderer_config(s)), encoding="utf-8")
+        cfg_file.write_text(yaml.safe_dump(S.renderer_config(s, series)), encoding="utf-8")
         cmd = [sys.executable, "-u", str(S.ROOT / "narrate.py"), "--events",
-               "--strip", arc["strip"], "--arc", arc["title"],
+               "--strip", arc["strip"], "--arc", arc["title"], "--series", series["name"], "--work", str(arc_dir),
                "--progs", catalog.format_progs(arc["progs"]).replace(" ", ""),
                "--plex", ",".join(f"{p}={se}x{e}" for p, (se, e) in numbers.items()),
                "--config", str(cfg_file), "--cast", str(S.ROOT / s["cast_file"])]
@@ -103,8 +105,9 @@ class Runner:
             cmd += ["--only", catalog.format_progs(progs).replace(" ", "")]
 
         db.update_job(jid, status="running", started=time.time(), progress="starting", log="", error="")
-        db.append_log(jid, "Progs " + ", ".join(
-            f"{p} (s{numbers[p][0]:02d}e{numbers[p][1]:02d})" if p in numbers else str(p) for p in progs) + "\n")
+        db.append_log(jid, catalog.series_label(series) + ": " + ", ".join(
+            catalog.issue_label(series, p) + (f" (s{numbers[p][0]:02d}e{numbers[p][1]:02d})" if p in numbers else "")
+            for p in progs) + "\n")
         self.proc = subprocess.Popen(cmd, cwd=S.ROOT, env={**os.environ, **S.renderer_env(s)},
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      encoding="utf-8", errors="replace")
@@ -119,9 +122,10 @@ class Runner:
                 kind = ev.get("event")
                 if kind == "prog_start":
                     current_prog = ev["prog"]
-                    db.update_job(jid, progress=f"Prog {current_prog} (episode {ev['episode']} of {len(arc['progs'])})")
+                    db.update_job(jid, progress=f"{catalog.issue_label(series, current_prog)} "
+                                                f"(episode {ev['episode']} of {len(arc['progs'])})")
                 elif kind == "stage":
-                    db.update_job(jid, progress=f"Prog {ev['prog']}: {ev['detail']}")
+                    db.update_job(jid, progress=f"{catalog.issue_label(series, ev['prog'])}: {ev['detail']}")
                 elif kind == "episode_done":
                     done += 1
                     db.set_episode(arc["id"], ev["prog"], ev["episode"], "rendered", path=ev["path"], job_id=jid)

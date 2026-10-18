@@ -6,6 +6,7 @@ Two indexes, both compiled by 2000 AD fans and hosted on Wikimedia Commons:
 """
 import io
 import re
+from pathlib import Path
 
 import requests
 
@@ -259,36 +260,67 @@ def download_and_parse(cache_dir, latest=None, prefer_cache=True) -> list[dict]:
     return arcs
 
 
-# ---------- archive & seasons ----------
+# ---------- series, seasons, working folders ----------
 
-FIRST_YEAR = 1977  # Plex season 1; 2000 AD's first year
-
-
-def archive_progs(settings: dict) -> dict[int, int | None]:
-    """Progs present in the archive (folder or Komga), matched the same way the renderer does,
-    mapped to their publication year (None if it can't be told)."""
-    from pathlib import Path
-
-    from sources import FolderSource, KomgaSource
-
-    if settings["source"] == "komga":
-        src = KomgaSource({"url": settings["komga_url"], "api_key": settings["komga_api_key"],
-                           "user": settings["komga_user"], "password": settings["komga_password"],
-                           "series": settings["komga_series"]})
-        return src.years()
-    path = settings["comics_path"]
-    if not path or not Path(path).is_dir():
-        return {}
-    return FolderSource({"path": path}).years()
+def is_main_series(series: dict | None) -> bool:
+    """The 2000 AD weekly (what the Wikimedia indexes describe, and where the strips are called progs)."""
+    return bool(series) and (series.get("cv_id") == 19752 or series.get("name") == "2000 AD")
 
 
-def plex_numbers(arc: dict, strip_arcs: list[dict], years: dict) -> dict[int, tuple[int, int]]:
-    """Plex (season, episode) for each of the arc's progs.
+def issue_label(series: dict | None, n: int) -> str:
+    return f"Prog {n}" if is_main_series(series) else f"#{n}"
 
-    A season is a year of publication (1977 = season 1), and its episodes are every episode of the
-    strip that year in prog order, so one-offs and multi-part stories sit together as they appeared.
-    A season set by hand on the story overrides this: the story becomes that season on its own.
-    Progs whose year isn't known (not in the archive) get no number."""
+
+def series_label(series: dict | None) -> str:
+    if not series:
+        return ""
+    return series["name"] + (f" ({series['year']})" if series.get("year") else "")
+
+
+def work_dir(work_path: str, arc: dict, series: dict | None) -> Path:
+    """Where a story's page scripts and renders live. 2000 AD keeps the original layout, so earlier readings
+    are reused; other titles get a folder each, so stories with the same name in two titles don't collide."""
+    from narrate import slug
+
+    base = Path(work_path)
+    if series and not is_main_series(series):
+        base = base / slug(series_label(series))
+    return base / f"{slug(arc['strip'])}--{slug(arc['title'])}"
+
+
+def issue_order(issues: dict) -> dict:
+    """{(series_id, number): (year, position through the year)} for every issue in the library.
+
+    The position puts issues of different titles in publication order: the cover date when Comic Vine gave
+    one, otherwise how far through its year the issue falls (a weekly's 26th prog of 52 sits mid-year, beside
+    a monthly's 6th issue of 12)."""
+    from datetime import date
+
+    out = {}
+    for sid, nums in issues.items():
+        per_year: dict[int, list] = {}
+        for n, i in nums.items():
+            if i["year"]:
+                per_year.setdefault(i["year"], []).append(n)
+        for year, ns in per_year.items():
+            ns.sort()
+            for k, n in enumerate(ns):
+                d = nums[n].get("date") or ""
+                try:
+                    frac = (date.fromisoformat(d[:10]).timetuple().tm_yday - 0.5) / 366 if d[:4] == str(year) else None
+                except ValueError:
+                    frac = None
+                out[(sid, n)] = (year, frac if frac is not None else (k + 0.5) / len(ns))
+    return out
+
+
+def plex_numbers(arc: dict, strip_arcs: list[dict], order: dict) -> dict[int, tuple[int, int]]:
+    """Plex (season, episode) for each of the arc's issues.
+
+    One Plex show per strip, whichever titles it ran in. A season is a year of publication (the strip's
+    first year is season 1), and its episodes are every episode of the strip that year in publication
+    order, one-offs and multi-part stories together. A season set by hand on the story overrides this: the
+    story becomes that season on its own. Issues not in the library get no number."""
     if arc.get("season"):
         return {p: (arc["season"], i) for i, p in enumerate(arc["progs"], 1)}
     by_year: dict[int, list] = {}
@@ -296,11 +328,15 @@ def plex_numbers(arc: dict, strip_arcs: list[dict], years: dict) -> dict[int, tu
         if a.get("hidden") or a.get("season"):
             continue
         for p in a["progs"]:
-            if years.get(p):
-                by_year.setdefault(years[p], []).append((p, a["progs"][0], a["id"]))
+            o = order.get((a["series_id"], p))
+            if o:
+                by_year.setdefault(o[0], []).append((o[1], a["series_id"] or 0, p, a["progs"][0], a["id"]))
+    if not by_year:
+        return {}
+    first = min(by_year)
     out = {}
     for year, entries in by_year.items():
-        for i, (p, _, aid) in enumerate(sorted(entries), 1):
+        for i, (_, _, p, _, aid) in enumerate(sorted(entries), 1):
             if aid == arc["id"]:
-                out[p] = (year - FIRST_YEAR + 1, i)
+                out[p] = (year - first + 1, i)
     return out

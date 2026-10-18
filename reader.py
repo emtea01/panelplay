@@ -30,13 +30,13 @@ class PageScript(BaseModel):
     panels: list[Panel]
 
 
-TAG_PROMPT = """These {n} images are every page of one issue ("prog") of the British comic 2000 AD, in order.
+TAG_PROMPT = """These {n} images are every page of one issue of the comic "{series}", in order.
 Page numbers start at 1.
 Which pages contain the strip "{strip}"{arc_hint}? A strip usually starts on a page with its title logo and runs
 until the next strip's title page. Ignore covers, adverts, letters pages and other strips.
 If the strip is not in this issue, return an empty list."""
 
-READ_PROMPT = """This is a page of the 2000 AD strip "{strip}", story "{arc}".
+READ_PROMPT = """This is a page of the strip "{strip}", story "{arc}", from the comic "{series}".
 Write it out as a script for an audio drama.
 
 - List the panels in reading order (left to right, top to bottom, following the gutters).
@@ -95,18 +95,20 @@ class Reader:
                 time.sleep(10 * (attempt + 1))
         raise RuntimeError("Gemini kept failing; free-tier daily quota may be used up. Re-run later, cached pages are kept.")
 
-    def tag_pages(self, thumbs: list[bytes], strip: str, arc: str) -> StripPages:
+    def tag_pages(self, thumbs: list[bytes], strip: str, arc: str, series: str = "2000 AD") -> StripPages:
         from google.genai import types
 
-        parts = [TAG_PROMPT.format(n=len(thumbs), strip=strip, arc_hint=f' (story "{arc}")' if arc else "")]
+        parts = [TAG_PROMPT.format(n=len(thumbs), series=series, strip=strip,
+                                   arc_hint=f' (story "{arc}")' if arc else "")]
         for i, t in enumerate(thumbs, 1):
             parts.append(f"Page {i}:")
             parts.append(types.Part.from_bytes(data=t, mime_type="image/jpeg"))
         return self._call(self.tag_model, parts, StripPages)
 
-    def read_page(self, image: bytes, mime: str, strip: str, arc: str, cast_names: list[str]) -> PageScript:
+    def read_page(self, image: bytes, mime: str, strip: str, arc: str, cast_names: list[str],
+                  series: str = "2000 AD") -> PageScript:
         from google.genai import types
 
-        prompt = READ_PROMPT.format(strip=strip, arc=arc, cast=", ".join(cast_names) or "(none)")
+        prompt = READ_PROMPT.format(series=series, strip=strip, arc=arc, cast=", ".join(cast_names) or "(none)")
         parts = [types.Part.from_bytes(data=image, mime_type=mime), prompt]
         return self._call(self.read_model, parts, PageScript)

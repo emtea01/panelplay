@@ -1,4 +1,4 @@
-"""PanelPlay portal: browse story arcs, queue renders, watch progress, manage settings."""
+"""PanelPlay portal: the comics library, its story arcs, render queue and progress, and settings."""
 import html
 import threading
 import time
@@ -27,6 +27,8 @@ runner = Runner(db)
 @asynccontextmanager
 async def lifespan(_app):
     runner.start()
+    if not db.series_list():
+        start_scan()  # first start: find what's in the library
     yield
 
 
@@ -51,32 +53,41 @@ def _duration(a, b):
 templates.env.filters["when"] = _when
 templates.env.globals["duration"] = _duration
 templates.env.globals["format_progs"] = catalog.format_progs
+templates.env.globals["issue_label"] = catalog.issue_label
+templates.env.globals["series_label"] = catalog.series_label
+templates.env.globals["is_main_series"] = catalog.is_main_series
 
 
-class Archive:
-    """Which progs the archive holds, with their years. Scanning a network share takes a moment, so it's cached."""
-
-    def __init__(self):
-        self.progs, self.checked, self.error, self._key = {}, 0.0, "", None
-
-    def get(self, s, force=False) -> dict:
-        key = (s["source"], s["comics_path"], s["komga_url"], s["komga_series"])
-        if force or key != self._key or time.time() - self.checked > 900:
-            try:
-                self.progs, self.error = catalog.archive_progs(s), ""
-            except Exception as e:
-                self.progs, self.error = {}, f"Couldn't read the archive: {e}"
-            self.checked, self._key = time.time(), key
-        return self.progs
-
-
-archive = Archive()
+library_scan = {"running": False, "message": ""}
 index_import = {"running": False, "message": ""}
 
 
-def _arc_row(arc, held, rendered, active):
+def start_scan():
+    if library_scan["running"]:
+        return
+    library_scan.update(running=True, message="Scanning the library…")
+    threading.Thread(target=_scan, daemon=True).start()
+
+
+def _scan():
+    import library
+
+    try:
+        found = library.scan(S.current(db))
+        db.save_scan(found)
+        n = sum(len(f["issues"]) for f in found)
+        library_scan.update(message=f"Found {len(found)} series, {n} issues.")
+    except BaseException as e:  # SystemExit from the scanner carries a readable message
+        library_scan.update(message=f"Couldn't scan the library: {e}")
+    finally:
+        library_scan["running"] = False
+
+
+def _arc_row(arc, held, rendered, active, series=None):
+    """held: {series_id: {issue number: ...}} for the whole library."""
     total = len(arc["progs"])
-    missing = [p for p in arc["progs"] if p not in held]
+    have = held.get(arc["series_id"], {})
+    missing = [p for p in arc["progs"] if p not in have]
     done = rendered.get(arc["id"], 0)
     if arc["id"] in active:
         status = ("Rendering", "running") if active[arc["id"]] == "running" else ("Queued", "queued")
@@ -87,7 +98,8 @@ def _arc_row(arc, held, rendered, active):
     else:
         status = ("Not rendered", "none")
     available = bool(total) and not missing and not arc["specials"]
-    return {**arc, "total": total, "missing": missing, "available": available, "status": status, "done": done}
+    return {**arc, "total": total, "missing": missing, "available": available, "status": status, "done": done,
+            "series": (series or {}).get(arc["series_id"])}
 
 
 def _render_page(request, name, **ctx):
@@ -101,12 +113,18 @@ def home():
     return RedirectResponse("/arcs")
 
 
+def _series_by_id():
+    return {sr["id"]: sr for sr in db.series_list(present_only=False)}
+
+
 @app.get("/arcs", response_class=HTMLResponse)
-def arcs(request: Request, strip: str = "", q: str = "", available: str = "", status: str = "", page: int = 1):
+def arcs(request: Request, strip: str = "", q: str = "", available: str = "", status: str = "", series: str = "",
+         page: int = 1):
     s = S.current(db)
-    held = archive.get(s)
+    held, by_id = db.issues(), _series_by_id()
     rendered, active = db.rendered_counts(), db.active_jobs_by_arc()
-    rows = [_arc_row(a, held, rendered, active) for a in db.arcs(strip or None, q.strip() or None)]
+    sid = int(series) if series.isdigit() else None
+    rows = [_arc_row(a, held, rendered, active, by_id) for a in db.arcs(strip or None, q.strip() or None, series_id=sid)]
     if available:
         rows = [r for r in rows if r["available"]]
     if status == "rendered":
@@ -115,31 +133,37 @@ def arcs(request: Request, strip: str = "", q: str = "", available: str = "", st
         rows = [r for r in rows if not r["done"]]
     elif status == "active":
         rows = [r for r in rows if r["id"] in active]
-    rows.sort(key=lambda r: (r["strip"].lower(), r["progs"][0] if r["progs"] else 10**6, r["title"]))
+    order = catalog.issue_order(held)
+    rows.sort(key=lambda r: (r["strip"].lower(),
+                             order.get((r["series_id"], r["progs"][0]), (9999, 0)) if r["progs"] else (9999, 0),
+                             r["title"]))
     pages = max(1, (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = min(max(1, page), pages)
     ctx = dict(rows=rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE], count=len(rows), page=page, pages=pages,
-               strip=strip, q=q, available=available, status=status, strips=db.strips(),
-               problems=S.problems(s), archive_error=archive.error, archive_count=len(held),
-               index_import=index_import, any_arcs=bool(db.strips()))
+               strip=strip, q=q, available=available, status=status, series=series, strips=db.strips(),
+               series_list=[sr for sr in by_id.values() if sr["present"]], problems=S.problems(s),
+               library_scan=library_scan, any_series=bool(by_id), index_import=index_import,
+               any_arcs=bool(db.strips()))
     if request.headers.get("HX-Request") and request.headers.get("HX-Target") == "arc-table":
         return templates.TemplateResponse(request, "_arc_table.html", ctx)
     return _render_page(request, "arcs.html", **ctx)
 
 
 @app.get("/arcs/new", response_class=HTMLResponse)
-def new_arc_form(request: Request):
-    return _render_page(request, "arc_new.html", strips=db.strips(), error="", form={})
+def new_arc_form(request: Request, series: str = ""):
+    return _render_page(request, "arc_new.html", strips=db.strips(), series_list=db.series_list(), error="",
+                        form={"series": series})
 
 
 @app.post("/arcs/new")
-def new_arc(request: Request, strip: str = Form(...), title: str = Form(...), progs: str = Form(...),
-            notes: str = Form("")):
+def new_arc(request: Request, series: int = Form(...), strip: str = Form(...), title: str = Form(...),
+            progs: str = Form(...), notes: str = Form("")):
     nums, specials = catalog.parse_progs(progs)
-    if not nums:
-        return _render_page(request, "arc_new.html", strips=db.strips(), form=dict(strip=strip, title=title,
-                            progs=progs, notes=notes), error="Couldn't read any prog numbers from that.")
-    arc_id = db.add_arc({"strip": strip.strip(), "title": title.strip(), "progs": nums,
+    if not nums or not db.series(series):
+        return _render_page(request, "arc_new.html", strips=db.strips(), series_list=db.series_list(),
+                            form=dict(series=str(series), strip=strip, title=title, progs=progs, notes=notes),
+                            error="Couldn't read any issue numbers from that.")
+    arc_id = db.add_arc({"series_id": series, "strip": strip.strip(), "title": title.strip(), "progs": nums,
                          "specials": ", ".join(specials), "notes": notes.strip(), "source": "manual"})
     return RedirectResponse(f"/arcs/{arc_id}", status_code=303)
 
@@ -150,24 +174,25 @@ def arc_detail(request: Request, arc_id: int):
     if not arc:
         raise HTTPException(404)
     s = S.current(db)
-    held = archive.get(s)
-    row = _arc_row(arc, held, db.rendered_counts(), db.active_jobs_by_arc())
+    held, by_id = db.issues(), _series_by_id()
+    row = _arc_row(arc, held, db.rendered_counts(), db.active_jobs_by_arc(), by_id)
+    series = by_id.get(arc["series_id"])
+    have = held.get(arc["series_id"], {})
     eps = db.episodes(arc_id)
-    from narrate import slug
-
-    arc_dir = Path(s["work_path"]) / f"{slug(arc['strip'])}--{slug(arc['title'])}"
-    numbers = catalog.plex_numbers(arc, db.strip_arcs(arc["strip"]), held)
+    arc_dir = catalog.work_dir(s["work_path"], arc, series)
+    numbers = catalog.plex_numbers(arc, db.strip_arcs(arc["strip"]), catalog.issue_order(held))
     episodes = []
     for i, p in enumerate(arc["progs"], 1):
         e = eps.get(p, {})
         se = numbers.get(p)
-        episodes.append({"prog": p, "episode": i, "held": p in held, "year": held.get(p),
+        episodes.append({"prog": p, "label": catalog.issue_label(series, p), "episode": i, "held": p in have,
+                         "year": (have.get(p) or {}).get("year"),
                          "plex": f"S{se[0]:02d}E{se[1]:02d}" if se else "", "status": e.get("status", ""),
                          "path": e.get("path", ""), "detail": e.get("detail", ""), "when": e.get("rendered_at"),
                          "transcript": (arc_dir / f"prog_{p:04d}" / "transcript.txt").exists(),
                          "read": (arc_dir / f"prog_{p:04d}" / "tag.json").exists()})
     seasons = sorted({se for se, _ in numbers.values()})
-    return _render_page(request, "arc.html", arc=row, episodes=episodes, seasons=seasons,
+    return _render_page(request, "arc.html", arc=row, episodes=episodes, seasons=seasons, series=series,
                         jobs=db.jobs(20, arc_id=arc_id), problems=S.problems(s))
 
 
@@ -184,12 +209,14 @@ def queue_render(arc_id: int, mode: str = Form("render"), prog: int | None = For
 
 @app.post("/arcs/{arc_id}/edit")
 def edit_arc(arc_id: int, title: str = Form(...), progs: str = Form(...), season: str = Form(""),
-             notes: str = Form(""), hidden: str = Form("")):
+             notes: str = Form(""), hidden: str = Form(""), strip: str = Form("")):
     nums, specials = catalog.parse_progs(progs)
     fields = {"title": title.strip(), "notes": notes.strip(), "hidden": 1 if hidden else 0,
               "season": int(season) if season.strip().isdigit() else None}
     if nums or specials:
         fields.update(progs=nums, specials=", ".join(specials))
+    if strip.strip():
+        fields["strip"] = strip.strip()
     db.update_arc(arc_id, **fields)
     return RedirectResponse(f"/arcs/{arc_id}", status_code=303)
 
@@ -199,12 +226,41 @@ def transcript(arc_id: int, prog: int):
     arc = db.arc(arc_id)
     if not arc:
         raise HTTPException(404)
-    from narrate import slug
-
-    f = Path(S.current(db)["work_path"]) / f"{slug(arc['strip'])}--{slug(arc['title'])}" / f"prog_{prog:04d}" / "transcript.txt"
+    series = db.series(arc["series_id"]) if arc["series_id"] else None
+    f = catalog.work_dir(S.current(db)["work_path"], arc, series) / f"prog_{prog:04d}" / "transcript.txt"
     if not f.exists():
         raise HTTPException(404)
     return f.read_text(encoding="utf-8")
+
+
+# ---------- library ----------
+
+@app.get("/library", response_class=HTMLResponse)
+def library_page(request: Request):
+    ctx = dict(series_list=db.series_list(), library_scan=library_scan, problems=S.problems(S.current(db)),
+               main=db.main_series(), index_import=index_import)
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(request, "_series_table.html", ctx)
+    return _render_page(request, "library.html", **ctx)
+
+
+@app.post("/library/scan", response_class=HTMLResponse)
+def scan_library(request: Request):
+    start_scan()
+    return templates.TemplateResponse(request, "_scan_status.html", dict(library_scan=library_scan))
+
+
+@app.get("/library/scan", response_class=HTMLResponse)
+def scan_status(request: Request):
+    return templates.TemplateResponse(request, "_scan_status.html", dict(library_scan=library_scan))
+
+
+@app.post("/library/{series_id}/kind")
+def set_kind(series_id: int, kind: str = Form(...)):
+    if kind not in ("auto", "anthology", "single"):
+        raise HTTPException(400)
+    db.update_series(series_id, kind=kind)
+    return RedirectResponse("/library", status_code=303)
 
 
 # ---------- renders ----------
@@ -265,11 +321,15 @@ def import_status(request: Request):
 
 def _import_index(refresh=False):
     try:
-        held = archive.get(S.current(db), force=True)
+        main = db.main_series()
+        if not main:
+            index_import.update(message="No 2000 AD series in the library yet (Library → Rescan).")
+            return
+        held = db.issues(main["id"]).get(main["id"], {})
         arcs = catalog.download_and_parse(S.data_dir() / "index", latest=max(held) if held else None,
                                           prefer_cache=not refresh)
         with db.conn() as c:
-            new = sum(db.upsert_arc(c, a) for a in arcs)
+            new = sum(db.upsert_arc(c, {**a, "series_id": main["id"]}) for a in arcs)
         index_import.update(message=f"Imported {len(arcs)} stories ({new} new).")
     except Exception as e:
         index_import.update(message=f"Import failed: {e}")
@@ -286,8 +346,12 @@ def test_setting(what: str):
         return '<span class="test bad">✗ No key saved yet.</span>'
     try:
         if what == "archive":
-            n = len(archive.get(s, force=True))
-            ok, msg = n > 0, (f"Found {n} progs." if n else (archive.error or "No progs found there."))
+            import library
+
+            found = library.scan(s)
+            db.save_scan(found)
+            n = sum(len(f["issues"]) for f in found)
+            ok, msg = n > 0, f"Found {len(found)} series, {n} issues." if n else "No comics found there."
         elif what == "output":
             p = Path(s["output_path"])
             probe = p / ".panelplay_write_test"
@@ -315,8 +379,11 @@ def test_setting(what: str):
             ok = data.get("status_code") == 1
             msg = "Working." if ok else data.get("error", f"HTTP {r.status_code}")
         elif what == "komga":
-            n = len(catalog.archive_progs({**s, "source": "komga"}))
-            ok, msg = n > 0, f"Found {n} progs in “{s['komga_series']}”."
+            import library
+
+            found = library.scan({**s, "source": "komga"})
+            n = sum(len(f["issues"]) for f in found)
+            ok, msg = n > 0, f"Found {len(found)} series, {n} issues."
         else:
             raise HTTPException(404)
     except HTTPException:

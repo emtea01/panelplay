@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Library{% endblock %}
+{% block content %}
+<h1>Library</h1>
+<p class="sub">Every series in your comics library. Find the stories in a series to add them to Story arcs.</p>
+
+{% if problems %}
+<div class="notice"><strong>Before you can render:</strong>
+  <ul>{% for p in problems %}<li><a href="/settings">{{ p }}</a></li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="actions" style="margin:0 0 14px">
+  <div id="scan-status">{% include "_scan_status.html" %}</div>
+</div>
+
+<div id="series-table" hx-get="/library" hx-trigger="every 5s [document.querySelector('.indexing')]" hx-swap="innerHTML">
+  {% include "_series_table.html" %}
+</div>
+{% endblock %}

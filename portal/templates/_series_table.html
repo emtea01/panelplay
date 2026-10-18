@@ -1,0 +1,41 @@
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>Series</th><th class="num">Issues</th><th class="num">Stories</th><th class="hide-sm">Kind</th><th>Stories found by</th>
+  </tr></thead>
+  <tbody>
+  {% for sr in series_list %}
+    <tr>
+      <td class="title-cell">
+        {% if sr.arc_count %}<a href="/arcs?series={{ sr.id }}">{{ sr.name }}</a>{% else %}<strong>{{ sr.name }}</strong>{% endif %}
+        <br><span class="strip">{{ sr.year or '' }}{% if sr.publisher %} · {{ sr.publisher }}{% endif %}</span>
+      </td>
+      <td class="num">{{ sr.issue_count }}</td>
+      <td class="num">{{ sr.arc_count }}</td>
+      <td class="hide-sm">
+        <form method="post" action="/library/{{ sr.id }}/kind" class="inline">
+          <select name="kind" onchange="this.form.submit()" aria-label="Kind of series">
+            <option value="auto" {{ 'selected' if sr.kind == 'auto' }}>Automatic</option>
+            <option value="anthology" {{ 'selected' if sr.kind == 'anthology' }}>Anthology</option>
+            <option value="single" {{ 'selected' if sr.kind == 'single' }}>One story per issue</option>
+          </select>
+        </form>
+      </td>
+      <td>
+        {% if is_main_series(sr) %}
+          <span class="hint">The 2000 AD story index</span>
+          <div id="import-status">{% include "_import_status.html" %}</div>
+        {% elif sr.index_status in ('queued', 'running') %}
+          <span class="indexing"><span class="spinner"></span>{{ sr.index_message or 'Waiting…' }}</span>
+        {% else %}
+          {% if sr.index_message %}<span class="hint {{ 'test bad' if sr.index_status == 'failed' }}">{{ sr.index_message }}</span><br>{% endif %}
+          <span class="hint">Not looked for yet</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="hint">No series found yet. Set the comics library folder in <a href="/settings">Settings</a>, then rescan.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

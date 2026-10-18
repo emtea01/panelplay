@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Turn a 2000 AD story arc into narrated, character-voiced episodes for Plex.
+Turn a comic story arc (2000 AD by default) into narrated, character-voiced episodes for Plex.
 
   python narrate.py --strip "Judge Dredd" --arc "The Robot Wars" --progs 10-17 --season 1
 
@@ -42,7 +42,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strip", required=True, help='e.g. "Judge Dredd"')
     ap.add_argument("--arc", required=True, help='e.g. "The Robot Wars"')
-    ap.add_argument("--progs", required=True, help='e.g. "10-17" or "10,11,14-16"')
+    ap.add_argument("--progs", required=True, help='issue (prog) numbers, e.g. "10-17" or "10,11,14-16"')
+    ap.add_argument("--series", default="2000 AD", help="the comic the story ran in (for Gemini's prompts)")
+    ap.add_argument("--work", help="this story's working folder (default: <paths.work>/<strip>--<arc>)")
     ap.add_argument("--season", type=int, default=1, help="Plex season number for this arc")
     ap.add_argument("--plex", help='Plex numbers per prog instead of --season, e.g. "10=1x9,11=1x10" (prog=SxE)')
     ap.add_argument("--stage", choices=["tag", "read", "render", "all"], default="all")
@@ -61,7 +63,7 @@ def main():
     work = Path(cfg["paths"]["work"]).expanduser()
     if not work.is_absolute():
         work = HERE / work
-    arc_dir = work / f"{slug(args.strip)}--{slug(args.arc)}"
+    arc_dir = Path(args.work) if args.work else work / f"{slug(args.strip)}--{slug(args.arc)}"
     progs = parse_progs(args.progs)
     if args.only:
         only = set(parse_progs(args.only))
@@ -119,7 +121,7 @@ def main():
             print(f"  finding '{args.strip}' in {n} pages")
             emit("stage", prog=prog, stage="tag", detail=f"finding the strip in {n} pages")
             thumbs = [source.thumbnail(book_(), i) for i in range(1, n + 1)]
-            tag = get_reader().tag_pages(thumbs, args.strip, args.arc).model_dump()
+            tag = get_reader().tag_pages(thumbs, args.strip, args.arc, args.series).model_dump()
             tag_file.write_text(json.dumps(tag, indent=2), encoding="utf-8")
         tag = json.loads(tag_file.read_text(encoding="utf-8"))
         pages = tag["pages"]
@@ -140,7 +142,7 @@ def main():
             print(f"  reading page {pg}")
             emit("stage", prog=prog, stage="read", detail=f"reading page {pg} ({pages.index(pg) + 1} of {len(pages)})")
             img, mime = source.page(book_(), pg)
-            script = get_reader().read_page(img, mime, args.strip, args.arc, cast.names)
+            script = get_reader().read_page(img, mime, args.strip, args.arc, cast.names, args.series)
             sfile.write_text(json.dumps(script.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
         if args.stage == "read":
             continue
