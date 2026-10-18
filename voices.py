@@ -156,7 +156,10 @@ def speak_line(tts, cast: Cast, line: dict) -> np.ndarray:
     v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"])
     delivery = line.get("delivery", "normal")
     speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(delivery, 1.0)
-    audio = tts.say(line["text"], v["voice"], speed, engine=v.get("engine"))
+    text = line["text"]
+    if line.get("tag") and v.get("engine") == "elevenlabs":
+        text = f"[{line['tag']}] {text}"  # ElevenLabs v3 audio tag, e.g. "screams in agony"; other engines skip it
+    audio = tts.say(text, v["voice"], speed, engine=v.get("engine"))
     fx = v.get("fx") or ("radio" if delivery == "radio" else None)
     if fx:
         audio = apply_fx(audio, fx)

@@ -15,6 +15,8 @@ PANEL_LEAD = 0.35    # before the first balloon in a panel
 PANEL_TAIL = 0.55    # after the last balloon
 SILENT_PANEL = 2.2   # panels with no text
 PAGE_INTRO = 1.6     # full-page look before its panels
+PUNCH = 0.4          # snap-zoom into each panel (from the whole page for a page's first panel)
+PUNCH_CONTEXT = 2.2  # later panels punch in from a view this many times the panel's size
 
 
 def _font(size):
@@ -45,6 +47,8 @@ class Renderer:
         self.fps = cfg["fps"]
         self.motion = cfg.get("motion", True)
         self.read_sfx = cfg.get("read_sfx", False)
+        self.page_intro = cfg.get("page_intro", False)  # show each full page before its panels
+        self.punch = cfg.get("punch", True) and self.motion
         self.tts, self.cast = tts, cast
         # Render frames at 2x when zooming, so the zoom is smooth rather than jittery.
         self.scale = 2 if self.motion else 1
@@ -70,16 +74,42 @@ class Renderer:
     def page_frame(self, page):
         return self._fit(self._canvas(page), page, margin=0.03)
 
-    def panel_frame(self, page, box):
+    @staticmethod
+    def panel_rect(page, box):
+        """Panel box (0-1000, [ymin, xmin, ymax, xmax]) -> padded pixel rect, or None if the box is unusable."""
         ymin, xmin, ymax, xmax = [max(0, min(1000, v)) for v in box]
-        if ymax - ymin < 20 or xmax - xmin < 20:  # bad box from the model: show the whole page
-            return self.page_frame(page)
+        if ymax - ymin < 20 or xmax - xmin < 20:
+            return None
         pad = 12
-        crop = page.crop((
-            int(max(0, xmin - pad) / 1000 * page.width), int(max(0, ymin - pad) / 1000 * page.height),
-            int(min(1000, xmax + pad) / 1000 * page.width), int(min(1000, ymax + pad) / 1000 * page.height),
-        ))
-        return self._fit(self._canvas(page), crop)
+        return (int(max(0, xmin - pad) / 1000 * page.width), int(max(0, ymin - pad) / 1000 * page.height),
+                int(min(1000, xmax + pad) / 1000 * page.width), int(min(1000, ymax + pad) / 1000 * page.height))
+
+    def panel_frame(self, page, box, canvas=None):
+        rect = self.panel_rect(page, box)
+        if rect is None:  # bad box from the model: show the whole page
+            return self.page_frame(page)
+        return self._fit(canvas or self._canvas(page), page.crop(rect))
+
+    def punch_frames(self, page, canvas, start, end):
+        """Camera move from rect start to rect end (pixel rects on the page), easing out, at output size."""
+        bg = canvas.resize((self.W, self.H), Image.BILINEAR)
+        n = max(2, round(PUNCH * self.fps))
+        frames = []
+        for i in range(1, n + 1):
+            e = 1 - (1 - i / n) ** 3
+            rect = tuple(int(a + (b - a) * e) for a, b in zip(start, end))
+            frames.append(self._fit(bg, page.crop(rect)))
+        return frames
+
+    @staticmethod
+    def context_rect(page, rect):
+        """A wider view centred on rect, kept inside the page."""
+        l, t, r, b = rect
+        w = min(page.width, (r - l) * PUNCH_CONTEXT)
+        h = min(page.height, (b - t) * PUNCH_CONTEXT)
+        cx = min(max((l + r) / 2, w / 2), page.width - w / 2)
+        cy = min(max((t + b) / 2, h / 2), page.height - h / 2)
+        return (int(cx - w / 2), int(cy - h / 2), int(cx + w / 2), int(cy + h / 2))
 
     def title_frame(self, strip, arc, part_label):
         W, H = self.W * self.scale, self.H * self.scale
@@ -96,7 +126,7 @@ class Renderer:
         return im
 
     # ---------- sound ----------
-    def panel_audio(self, lines):
+    def panel_audio(self, lines, lead=PANEL_LEAD):
         parts = []
         for ln in lines:
             if ln["kind"] == "sfx" and not self.read_sfx:
@@ -108,7 +138,7 @@ class Renderer:
             parts.append(speak_line(self.tts, self.cast, ln))
         if not parts:
             return silence(SILENT_PANEL)
-        return np.concatenate([silence(PANEL_LEAD), *parts, silence(PANEL_TAIL)])
+        return np.concatenate([silence(lead), *parts, silence(PANEL_TAIL)])
 
     # ---------- video ----------
     def segment(self, frame: Image.Image, audio: np.ndarray, out: Path, zoom_in=True):
@@ -135,6 +165,21 @@ class Renderer:
         img.unlink()
         wav.unlink()
 
+    def moving_segment(self, frames: list, out: Path):
+        """Silent segment from pre-rendered frames, encoded to match the still segments so concat can copy."""
+        fdir = out.with_suffix("")
+        fdir.mkdir(exist_ok=True)
+        for i, f in enumerate(frames):
+            f.save(fdir / f"{i:03d}.png")
+        dur = len(frames) / self.fps
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(self.fps), "-i", str(fdir / "%03d.png"),
+               "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+               "-map", "0:v", "-map", "1:a", "-vf", "format=yuv420p",
+               "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", str(self.fps),
+               "-c:a", "aac", "-b:a", "160k", "-t", f"{dur:.3f}", str(out)]
+        subprocess.run(cmd, check=True)
+        shutil.rmtree(fdir)
+
     def episode(self, pages, scripts, strip, arc, part_label, title_line, seg_dir: Path, out_file: Path):
         """pages: list of PIL images; scripts: list of page-script dicts (same order)."""
         seg_dir.mkdir(parents=True, exist_ok=True)
@@ -150,11 +195,24 @@ class Renderer:
 
         n = 0
         for page, script in zip(pages, scripts):
-            add(self.page_frame(page), silence(PAGE_INTRO), zoom_in=False)
-            for panel in script["panels"]:
+            if self.page_intro:
+                add(self.page_frame(page), silence(PAGE_INTRO), zoom_in=False)
+            canvas = self._canvas(page)
+            full = (0, 0, page.width, page.height)
+            for i, panel in enumerate(script["panels"]):
                 n += 1
                 print(f"      panel {n}", end="\r", flush=True)
-                add(self.panel_frame(page, panel["box_2d"]), self.panel_audio(panel["lines"]), zoom_in=n % 2 == 1)
+                rect = self.panel_rect(page, panel["box_2d"])
+                if self.punch and rect:
+                    # Snap in (from the whole page on a page's first panel), then keep pushing in slowly.
+                    start = full if i == 0 and not self.page_intro else self.context_rect(page, rect)
+                    p = seg_dir / f"seg_{len(segs):04d}.mp4"
+                    self.moving_segment(self.punch_frames(page, canvas, start, rect), p)
+                    segs.append(p)
+                    add(self.panel_frame(page, panel["box_2d"], canvas), self.panel_audio(panel["lines"], lead=0.1))
+                else:
+                    add(self.panel_frame(page, panel["box_2d"], canvas), self.panel_audio(panel["lines"]),
+                        zoom_in=n % 2 == 1)
         print()
 
         lst = seg_dir / "list.txt"

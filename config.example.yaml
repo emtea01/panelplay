@@ -45,6 +45,7 @@ render:
   fps: 25
   motion: true       # slow Ken Burns zoom on each panel (set false for faster renders)
   read_sfx: false    # read "KRAKK!" style sound effects aloud via the narrator
+  page_intro: false  # show each full page for a moment before zooming into its panels
 
 paths:
   work: ./work                     # cached page scripts, audio and segments
