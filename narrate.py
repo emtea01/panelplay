@@ -76,6 +76,20 @@ def main():
 
     source = make_source(cfg)
     cast = Cast(Path(args.cast), work / f"{Path(args.cast).stem}_assigned.yaml")
+    # The story's casting brief (made by the portal): names for the reader to use, accents for the voices.
+    brief_file, cast_note = arc_dir / "characters.json", ""
+    if brief_file.exists():
+        characters = json.loads(brief_file.read_text(encoding="utf-8"))["characters"]
+        # A cast file name wins ("Walter the Wobot" is the cast's Walter, "Judge Joseph Dredd" is Judge Dredd).
+        for c in characters:
+            words = set(c["name"].lower().split())
+            c["name"] = next((n for n in cast.names if set(n.lower().split()) <= words), c["name"])
+        characters = list({c["name"]: c for c in characters}.values())
+        cast.use_brief(characters)
+        if characters:
+            cast_note = ("\n- Characters in this story, by the names to use: "
+                         + ", ".join(c["name"] + (f" ({c['accent']} accent)" if c.get("accent") else "")
+                                     for c in characters) + ".")
     reader = None
 
     def get_reader():
@@ -144,7 +158,7 @@ def main():
             emit("stage", prog=prog, stage="read", detail=f"reading page {pg} ({pages.index(pg) + 1} of {len(pages)})")
             img, mime = source.page(book_(), pg)
             script = get_reader().read_page(img, mime, args.strip, args.arc, cast.names, args.series,
-                                            _context_so_far(pdir, pages[:pages.index(pg)]))
+                                            cast_note + _context_so_far(pdir, pages[:pages.index(pg)]))
             sfile.write_text(json.dumps(script.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
         if args.stage == "read":
             continue

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from . import catalog, settings as S
+from . import brief, catalog, settings as S
 
 PANEL_LINE = re.compile(r"^\s*panel \d+\s*$")
 
@@ -97,6 +97,7 @@ class Runner:
                 pdir = arc_dir / f"prog_{p:04d}"
                 for f in [pdir / "tag.json", *pdir.glob("page_*.json")]:
                     f.unlink(missing_ok=True)
+            (arc_dir / brief.BRIEF_FILE).unlink(missing_ok=True)
         else:
             _pages_from_contents(s, series, arc, progs, arc_dir)
 
@@ -118,6 +119,9 @@ class Runner:
         db.append_log(jid, catalog.series_label(series) + ": " + ", ".join(
             catalog.issue_label(series, p) + (f" (s{numbers[p][0]:02d}e{numbers[p][1]:02d})" if p in numbers else "")
             for p in progs) + "\n")
+        if job["mode"] != "art":
+            db.update_job(jid, progress="casting: who speaks in this story, and how they sound")
+            brief.make(s, series, arc, arc_dir, lambda msg: db.append_log(jid, msg))
         self.proc = subprocess.Popen(cmd, cwd=S.ROOT, env={**os.environ, **S.renderer_env(s)},
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      encoding="utf-8", errors="replace")

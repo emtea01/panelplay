@@ -2,6 +2,7 @@
 import hashlib
 import os
 import subprocess
+import unicodedata
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,11 @@ import yaml
 SR = 24000
 DELIVERY_SPEED = {"normal": 1.0, "shout": 1.08, "whisper": 0.92, "radio": 1.0}
 DELIVERY_GAIN = {"normal": 1.0, "shout": 1.15, "whisper": 0.7, "radio": 0.95}
+
+
+def _name_key(name: str) -> str:
+    """Sláine and SLAINE are one character."""
+    return "".join(ch for ch in unicodedata.normalize("NFKD", name) if not unicodedata.combining(ch)).lower().strip()
 
 
 class Cast:
@@ -25,8 +31,15 @@ class Cast:
         if assigned_file.exists():
             self.assigned = {k.lower(): v for k, v in (yaml.safe_load(assigned_file.read_text(encoding="utf-8")) or {}).items()}
 
+    def use_brief(self, characters: list[dict]):
+        """Accents from the story's casting brief (portal/brief.py), for characters the cast file doesn't give one."""
+        self.story_accents = {_name_key(c["name"]): c["accent"] for c in characters if c.get("accent")}
+
     def voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
         v = self._voice_for(speaker, speaker_type, kind)
+        accent = getattr(self, "story_accents", {}).get(_name_key(speaker))
+        if accent and not v.get("accent") and kind != "caption":
+            v = {**v, "accent": accent}
         return {"engine": self.engine, **v} if self.engine else v
 
     def _voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
