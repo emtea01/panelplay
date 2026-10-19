@@ -45,10 +45,11 @@ def target(s: dict) -> tuple[str, str, str]:
 
 
 def scan(s: dict, episode_file: str, refresh=False) -> str:
-    """Ask Plex to scan the season folder of a newly written episode, or with refresh, to reload the
-    metadata and artwork of what's in it too. Returns the folder, as Plex sees it."""
+    """Ask Plex to scan the show folder of a newly written episode, or with refresh, to reload the
+    metadata and artwork of what's in it too. Returns the folder, as Plex sees it. The show's folder, not the
+    season's: Plex ignores a season folder scan for a show it doesn't have yet."""
     key, _, plex_root = target(s)
-    rel = Path(episode_file).parent.relative_to(Path(s["output_path"]))
+    rel = Path(episode_file).parent.parent.relative_to(Path(s["output_path"]))
     folder = str(_pure(plex_root).joinpath(*rel.parts))
     _get(s, f"/library/sections/{key}/refresh", path=folder, **({"force": 1} if refresh else {}))
     return folder
