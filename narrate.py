@@ -176,15 +176,14 @@ def main():
                          f"{args.strip}. {args.arc}. Part {part}.", pdir / "segments", out,
                          progress=lambda n: emit("stage", prog=prog, stage="render", detail=f"panel {n} of {total}"))
 
-        # Artwork for Plex (used when the library is set to prefer local assets).
+        # Artwork for Plex, from the strip itself: an issue's cover is usually another strip's.
         try:
-            cover = source.cover(book_())
-            out.with_suffix(".jpg").write_bytes(cover)
+            renderer.thumbnail(images[0], scripts[0]).save(out.with_suffix(".jpg"), quality=90)
             poster = season_dir.parent / "poster.jpg"
             if not poster.exists():
-                poster.write_bytes(cover)
+                images[0].convert("RGB").save(poster, quality=90)
         except Exception as e:  # artwork is a nice-to-have
-            print(f"  (couldn't save cover art: {e})")
+            print(f"  (couldn't save artwork: {e})")
         print("  done")
         emit("episode_done", prog=prog, episode=ep, path=str(out))
 

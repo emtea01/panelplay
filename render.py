@@ -111,6 +111,15 @@ class Renderer:
         cy = min(max((t + b) / 2, h / 2), page.height - h / 2)
         return (int(cx - w / 2), int(cy - h / 2), int(cx + w / 2), int(cy + h / 2))
 
+    def thumbnail(self, page, script) -> Image.Image:
+        """Episode still for Plex: the biggest panel on the strip's first page (usually its splash), framed as
+        in the video. The issue's cover is often another strip's."""
+        rects = [(r[2] - r[0]) * (r[3] - r[1]) for r in (self.panel_rect(page, p["box_2d"]) or (0, 0, 0, 0)
+                                                         for p in script["panels"])]
+        frame = (self.panel_frame(page, script["panels"][rects.index(max(rects))]["box_2d"])
+                 if rects and max(rects) else self.page_frame(page))
+        return frame.resize((self.W, self.H), Image.LANCZOS)
+
     def title_frame(self, strip, arc, part_label):
         W, H = self.W * self.scale, self.H * self.scale
         im = Image.new("RGB", (W, H), (12, 12, 16))
