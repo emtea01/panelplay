@@ -1,0 +1,25 @@
+{% if error %}<p class="test bad">✗ {{ error }}</p>
+{% elif not found %}<p class="hint">No voices match. Try fewer words, or another accent.</p>
+{% else %}
+<div class="table-wrap">
+<table>
+  <tbody>
+  {% for v in found %}
+    <tr>
+      <td class="title-cell"><b>{{ v.name }}</b><br><span class="hint">{{ v.accent }} · {{ v.gender }} · {{ v.age|replace('_', ' ') }} · {{ v.use }}</span></td>
+      <td class="hint">{{ v.description }}</td>
+      <td>{% if v.preview %}<audio controls preload="none" src="{{ v.preview }}"></audio>{% endif %}</td>
+      <td class="num">
+        <form class="field-row" method="post" action="/voices/character">
+          <input type="hidden" name="voice" value="{{ v.voice }}"><input type="hidden" name="voice_name" value="{{ v.short }}">
+          <input type="hidden" name="voice_only" value="1">
+          <input type="text" name="name" value="{{ for_name }}" placeholder="Character" required>
+          <button class="small primary">Use</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}

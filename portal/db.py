@@ -74,6 +74,20 @@ CREATE TABLE IF NOT EXISTS episodes (
     rendered_at REAL,
     PRIMARY KEY (arc_id, prog)
 );
+CREATE TABLE IF NOT EXISTS voices (
+    name       TEXT PRIMARY KEY COLLATE NOCASE,  -- a character, or "Narrator" for the series narrator
+    voice      TEXT NOT NULL,                    -- ElevenLabs voice id
+    voice_name TEXT NOT NULL DEFAULT '',
+    accent     TEXT NOT NULL DEFAULT '',         -- only for a voice that isn't natively that accent (adds a tag)
+    fx         TEXT NOT NULL DEFAULT '',         -- robot, radio or ''
+    speed      REAL NOT NULL DEFAULT 1.0,
+    note       TEXT NOT NULL DEFAULT '',
+    updated    REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pronunciations (
+    word   TEXT PRIMARY KEY COLLATE NOCASE,
+    say_as TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS arcs_strip ON arcs(strip COLLATE NOCASE);
 """
 
@@ -313,6 +327,38 @@ class DB:
         with self.conn() as c:
             return {r[0]: r[1] for r in
                     c.execute("SELECT arc_id, COUNT(*) FROM episodes WHERE status = 'rendered' GROUP BY arc_id")}
+
+    # ---------- voices ----------
+    def voices(self) -> list:
+        with self.conn() as c:
+            return [dict(r) for r in c.execute("SELECT * FROM voices ORDER BY name = 'Narrator' DESC, name")]
+
+    def set_voice(self, name: str, voice: str, voice_name="", accent="", fx="", speed=1.0, note="", rename_from=""):
+        with self.conn() as c:
+            if rename_from and rename_from.lower() != name.lower():
+                c.execute("DELETE FROM voices WHERE name = ?", (rename_from,))
+            c.execute("INSERT INTO voices (name, voice, voice_name, accent, fx, speed, note, updated) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET name = excluded.name, "
+                      "voice = excluded.voice, voice_name = excluded.voice_name, accent = excluded.accent, "
+                      "fx = excluded.fx, speed = excluded.speed, note = excluded.note, updated = excluded.updated",
+                      (name, voice, voice_name, accent, fx, speed, note, time.time()))
+
+    def delete_voice(self, name: str):
+        with self.conn() as c:
+            c.execute("DELETE FROM voices WHERE name = ?", (name,))
+
+    def pronunciations(self) -> list:
+        with self.conn() as c:
+            return [dict(r) for r in c.execute("SELECT * FROM pronunciations ORDER BY word")]
+
+    def set_pronunciation(self, word: str, say_as: str):
+        with self.conn() as c:
+            c.execute("INSERT INTO pronunciations (word, say_as) VALUES (?, ?) "
+                      "ON CONFLICT(word) DO UPDATE SET word = excluded.word, say_as = excluded.say_as", (word, say_as))
+
+    def delete_pronunciation(self, word: str):
+        with self.conn() as c:
+            c.execute("DELETE FROM pronunciations WHERE word = ?", (word,))
 
 
 def _arc(r) -> dict:

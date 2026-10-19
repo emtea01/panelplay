@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import catalog, settings as S
+from . import cast, catalog, settings as S
 from .db import DB
 from .indexer import Indexer
 from .jobs import Runner
@@ -22,6 +22,7 @@ PAGE_SIZE = 50
 
 db = DB(S.data_dir() / "panelplay.db")
 S.seed_from_dev_setup(db)
+cast.seed(db)
 runner = Runner(db)
 indexer = Indexer(db)
 
@@ -312,6 +313,58 @@ def render_detail(request: Request, job_id: int):
 def cancel(job_id: int):
     runner.cancel(job_id)
     return RedirectResponse(f"/renders/{job_id}", status_code=303)
+
+
+# ---------- voices ----------
+
+@app.get("/voices", response_class=HTMLResponse)
+def voices_page(request: Request, name: str = ""):
+    s = S.current(db)
+    cast_names = {v["name"].lower() for v in db.voices()}
+    return _render_page(request, "voices.html", voices=db.voices(), pronunciations=db.pronunciations(),
+                        assigned=[a for a in cast.assigned(s) if a["name"].lower() not in cast_names],
+                        for_name=name, has_key=bool(s.get("elevenlabs_api_key")))
+
+
+@app.post("/voices/character")
+def save_voice(name: str = Form(...), voice: str = Form(...), voice_name: str = Form(""), accent: str = Form(""),
+               fx: str = Form(""), speed: float = Form(1.0), note: str = Form(""), rename_from: str = Form(""),
+               voice_only: str = Form("")):
+    if fx not in ("", "robot", "radio"):
+        raise HTTPException(400)
+    old = next((v for v in db.voices() if v["name"].lower() == name.strip().lower()), None)
+    if voice_only and old:  # a voice picked in the finder: keep the character's accent, effect and speed
+        name, accent, fx, speed, note = old["name"], old["accent"], old["fx"], old["speed"], old["note"]
+    db.set_voice(name.strip(), voice.strip(), voice_name.strip(), accent.strip(), fx, speed, note.strip(),
+                 rename_from.strip())
+    return RedirectResponse("/voices#cast", status_code=303)
+
+
+@app.post("/voices/character/delete")
+def delete_voice(name: str = Form(...)):
+    db.delete_voice(name)
+    return RedirectResponse("/voices#cast", status_code=303)
+
+
+@app.post("/voices/pronounce")
+def save_pronunciation(word: str = Form(...), say_as: str = Form(...)):
+    db.set_pronunciation(word.strip(), say_as.strip())
+    return RedirectResponse("/voices#pronounce", status_code=303)
+
+
+@app.post("/voices/pronounce/delete")
+def delete_pronunciation(word: str = Form(...)):
+    db.delete_pronunciation(word)
+    return RedirectResponse("/voices#pronounce", status_code=303)
+
+
+@app.get("/voices/find", response_class=HTMLResponse)
+def find_voices(request: Request, accent: str = "", gender: str = "", age: str = "", q: str = "", name: str = ""):
+    try:
+        found, error = cast.find(S.current(db), accent, gender, age, q), ""
+    except Exception as e:
+        found, error = [], str(e)[:300]
+    return templates.TemplateResponse(request, "_voice_results.html", {"found": found, "error": error, "for_name": name})
 
 
 # ---------- settings ----------

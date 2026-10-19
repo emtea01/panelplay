@@ -126,3 +126,11 @@ pre.log { background: #0e0e11; color: #d8d7d2; padding: 14px; border-radius: 8px
   .form-grid { grid-template-columns: 1fr; }
   th.hide-sm, td.hide-sm { display: none; }
 }
+
+/* Voices page: a table of small forms */
+table.voices input[type=text], table.voices input[type=number], table.voices select { width: 100%; min-width: 90px; padding: 5px 7px; }
+table.voices input[type=number] { min-width: 70px; }
+input.mono { font-family: ui-monospace, monospace; font-size: 12px; min-width: 190px !important; }
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline-block; }
+

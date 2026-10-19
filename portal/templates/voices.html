@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Voices{% endblock %}
+{% block content %}
+<h1>Voices</h1>
+<p class="sub">Who voices whom, and how names are said. Changes apply to the next render; re-render an episode to hear
+  them (only the lines whose voice or wording changed cost credits).</p>
+
+<h2 id="cast">Cast</h2>
+<p class="hint">The narrator reads the title of each episode, and the captions unless a story is told by one of its
+  characters. Accent is only for a voice that isn't natively that accent: it asks ElevenLabs to put the accent on.</p>
+<div class="table-wrap">
+<table class="voices">
+  <thead><tr><th>Character</th><th>Voice</th><th>Voice ID</th><th>Accent</th><th>Effect</th><th class="num">Speed</th><th>Note</th><th></th></tr></thead>
+  <tbody>
+  {% for v in voices %}
+    {% set f = 'v' ~ loop.index %}
+    <tr>
+      <td>
+        <form id="{{ f }}" method="post" action="/voices/character"><input type="hidden" name="rename_from" value="{{ v.name }}"></form>
+        {% if v.name == 'Narrator' %}<input type="hidden" form="{{ f }}" name="name" value="Narrator"><b>Narrator</b>
+        {% else %}<input form="{{ f }}" type="text" name="name" value="{{ v.name }}" required>{% endif %}
+      </td>
+      <td><input form="{{ f }}" type="text" name="voice_name" value="{{ v.voice_name }}" placeholder="name"></td>
+      <td><input form="{{ f }}" type="text" name="voice" value="{{ v.voice }}" required spellcheck="false" class="mono"></td>
+      <td><input form="{{ f }}" type="text" name="accent" value="{{ v.accent }}" placeholder="native" list="accents"></td>
+      <td><select form="{{ f }}" name="fx">
+        {% for fx in ['', 'robot', 'radio'] %}<option value="{{ fx }}" {{ 'selected' if fx == v.fx }}>{{ fx or 'none' }}</option>{% endfor %}
+      </select></td>
+      <td class="num"><input form="{{ f }}" type="number" name="speed" value="{{ v.speed }}" step="0.05" min="0.7" max="1.2"></td>
+      <td><input form="{{ f }}" type="text" name="note" value="{{ v.note }}"></td>
+      <td class="num">
+        <button form="{{ f }}" class="small primary">Save</button>
+        <a class="btn small" href="/voices?name={{ v.name|urlencode }}#find" title="Find a different voice">Find…</a>
+        {% if v.name != 'Narrator' %}
+        <form class="inline" method="post" action="/voices/character/delete"
+              onsubmit='return confirm({{ ("Stop casting " ~ v.name ~ "? The next render picks a voice automatically.")|tojson }})'>
+          <input type="hidden" name="name" value="{{ v.name }}"><button class="small">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+    <tr>
+      <td><form id="vnew" method="post" action="/voices/character"></form>
+        <input form="vnew" type="text" name="name" placeholder="Add a character" required></td>
+      <td><input form="vnew" type="text" name="voice_name" placeholder="name"></td>
+      <td><input form="vnew" type="text" name="voice" placeholder="voice ID" required spellcheck="false" class="mono"></td>
+      <td><input form="vnew" type="text" name="accent" placeholder="native" list="accents"></td>
+      <td><select form="vnew" name="fx"><option value="">none</option><option>robot</option><option>radio</option></select></td>
+      <td class="num"><input form="vnew" type="number" name="speed" value="1.0" step="0.05" min="0.7" max="1.2"></td>
+      <td><input form="vnew" type="text" name="note"></td>
+      <td class="num"><button form="vnew" class="small">Add</button></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<datalist id="accents">{% for a in ['Irish', 'Scottish', 'Welsh', 'British', 'American', 'Australian', 'German', 'French', 'Italian', 'Russian', 'Spanish', 'Indian'] %}<option value="{{ a }}">{% endfor %}</datalist>
+
+<h2 id="auto">Picked automatically</h2>
+{% if assigned %}
+<p class="hint">Characters nobody has cast get a voice by themselves: a native voice from the ElevenLabs library when the
+  story's casting brief gives them an accent, otherwise one from the general pools. Keep one to make it theirs for good,
+  and to edit it.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Character</th><th>Voice</th><th>Accent</th><th>Effect</th><th></th></tr></thead>
+  <tbody>
+  {% for a in assigned %}
+    <tr>
+      <td>{{ a.name }}</td>
+      <td>{{ a.voice_name or '' }} <code class="hint">{{ a.voice }}</code></td>
+      <td>{{ a.for_accent or '' }}{% if a.for_accent and not a.native_accent %} <span class="hint">(tag)</span>{% endif %}</td>
+      <td>{{ a.fx or '' }}</td>
+      <td class="num">
+        <form class="inline" method="post" action="/voices/character">
+          <input type="hidden" name="name" value="{{ a.name|title }}"><input type="hidden" name="voice" value="{{ a.voice }}">
+          <input type="hidden" name="voice_name" value="{{ a.voice_name or '' }}"><input type="hidden" name="fx" value="{{ a.fx or '' }}">
+          <input type="hidden" name="accent" value="{{ '' if a.native_accent else (a.for_accent or '') }}">
+          <button class="small">Keep</button>
+        </form>
+        <a class="btn small" href="/voices?name={{ (a.name|title)|urlencode }}#find">Find…</a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p class="hint">None yet: they appear here after a render.</p>{% endif %}
+
+<h2 id="pronounce">Pronunciations</h2>
+<p class="hint">Names respelt the way they're said, sent to the voice in place of the name (whole words, with or
+  without accents). These win over the pronunciations a story's casting brief suggests.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Word</th><th>Say it as</th><th></th></tr></thead>
+  <tbody>
+  {% for p in pronunciations %}
+    <tr>
+      <td>{{ p.word }}</td>
+      <td><form id="p{{ loop.index }}" method="post" action="/voices/pronounce"><input type="hidden" name="word" value="{{ p.word }}"></form>
+        <input form="p{{ loop.index }}" type="text" name="say_as" value="{{ p.say_as }}" required></td>
+      <td class="num"><button form="p{{ loop.index }}" class="small primary">Save</button>
+        <form class="inline" method="post" action="/voices/pronounce/delete"><input type="hidden" name="word" value="{{ p.word }}"><button class="small">Remove</button></form></td>
+    </tr>
+  {% endfor %}
+    <tr>
+      <td><form id="pnew" method="post" action="/voices/pronounce"></form><input form="pnew" type="text" name="word" placeholder="Sláine" required></td>
+      <td><input form="pnew" type="text" name="say_as" placeholder="Slah-nya" required></td>
+      <td class="num"><button form="pnew" class="small">Add</button></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="find">Find a voice</h2>
+{% if has_key %}
+<p class="hint">Search ElevenLabs' voice library (native speakers, usable on a paid plan without a voice slot), listen,
+  and give a voice to a character.</p>
+<form class="filters" hx-get="/voices/find" hx-target="#found" hx-indicator="#finding">
+  <input type="text" name="accent" placeholder="Accent, e.g. Irish" list="accents">
+  <select name="gender"><option value="">Any gender</option><option>male</option><option>female</option></select>
+  <select name="age"><option value="">Any age</option><option value="young">young</option><option value="middle_aged">middle aged</option><option value="old">old</option></select>
+  <input type="search" name="q" placeholder="Words, e.g. gruff, deep, raspy">
+  <input type="text" name="name" value="{{ for_name }}" placeholder="For character…">
+  <button class="primary">Search</button>
+  <span id="finding" class="htmx-indicator spinner"></span>
+</form>
+<div id="found"></div>
+{% else %}<p class="hint">Add an ElevenLabs key in <a href="/settings">Settings</a> to search the voice library.</p>{% endif %}
+{% endblock %}

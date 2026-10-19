@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -10,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from . import brief, catalog, settings as S
+from . import brief, cast, catalog, settings as S
 
 PANEL_LINE = re.compile(r"^\s*panel \d+\s*$")
 
@@ -105,11 +106,12 @@ class Runner:
         run_dir.mkdir(parents=True, exist_ok=True)
         cfg_file = run_dir / f"job_{jid}.yaml"
         cfg_file.write_text(yaml.safe_dump(S.renderer_config(s, series)), encoding="utf-8")
+        cast_file = cast.build(db, s, run_dir / f"job_{jid}")  # the Voices page's cast
         cmd = [sys.executable, "-u", str(S.ROOT / "narrate.py"), "--events",
                "--strip", arc["strip"], "--arc", arc["title"], "--series", series["name"], "--work", str(arc_dir),
                "--progs", catalog.format_progs(arc["progs"]).replace(" ", ""),
                "--plex", ",".join(f"{p}={se}x{e}" for p, (se, e) in numbers.items()),
-               "--config", str(cfg_file), "--cast", str(S.ROOT / s["cast_file"])]
+               "--config", str(cfg_file), "--cast", str(cast_file)]
         if job["mode"] == "art":
             cmd += ["--stage", "art"]
         if job["only_prog"] or job["mode"] in ("rest", "art"):
@@ -172,6 +174,7 @@ class Runner:
                    + ("given new artwork" if job["mode"] == "art" else "rendered")) + (f", {skipped} skipped" if skipped else "")
         db.update_job(jid, status=status, error=error, progress=summary, finished=time.time())
         cfg_file.unlink(missing_ok=True)
+        shutil.rmtree(cast_file.parent, ignore_errors=True)
 
     def _tell_plex(self, s, jid, path, refresh=False):
         if not (s["plex_url"] and s["plex_token"]):

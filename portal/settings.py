@@ -32,7 +32,8 @@ FIELDS = {
     "gemini_read_model": ("Gemini model for reading pages", "gemini-flash-latest", "text"),
     "gemini_rpm":        ("Gemini requests per minute", 8, "int"),
     # Voices
-    "cast_file":         ("Voice cast", "cast-elevenlabs.yaml", "cast"),
+    "cast_file":         ("Voice pools (characters and pronunciations are on the Voices page)", "cast-elevenlabs.yaml",
+                          "cast"),
     "tts_engine":        ("Default voice engine (for cast entries that don't name one)", "kokoro",
                           "choice:kokoro|fake"),
     "elevenlabs_model":  ("ElevenLabs model", "eleven_v3", "text"),
