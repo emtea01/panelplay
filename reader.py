@@ -19,6 +19,8 @@ class Line(BaseModel):
     speaker: str = Field(description="Exact character name, 'Narrator' for captions, or a short label for unnamed people")
     speaker_type: Literal["male", "female", "robot", "unknown"]
     delivery: Literal["normal", "shout", "whisper", "radio"] = "normal"
+    accent: Optional[str] = Field(None, description="The accent the lettering spells out, e.g. 'German' for "
+                                                    "'Ze robot haf gone mad!', else null")
     text: str
 
 
@@ -64,11 +66,15 @@ Write it out as a script for an audio drama.
 - List the panels in reading order (left to right, top to bottom, following the gutters).
 - For each panel give its bounding box and every caption, speech balloon, thought balloon and sound effect,
   in the order they should be read.
-- Use these exact speaker names when they match: {cast}.
+- Use these exact speaker names when they match: {cast}.{context}
+- Call a character by the name the story gives them (in a caption, or what others call them), not a
+  label like "Doctor", once they've been named.
 - Captions are spoken by "Narrator". For unnamed characters use a short consistent label such as
   "Robot guard" or "Citizen".
 - Copy the text exactly as lettered, but in normal sentence case (not ALL CAPS). Keep stylised speech
   (e.g. a robot that says "wobot"). Join words broken across lines. Drop the strip's title logo and credits.
+- accent: when a character's speech is spelt to show an accent (e.g. "ze", "haf", "vot" for German, "ze" and
+  "'ow" for French, "och" and "wee" for Scottish), name the accent on each of their lines. Null otherwise.
 - delivery: "shout" for bold/jagged balloons or exclamations, "whisper" for small/dotted balloons,
   "radio" for zig-zag tails (radios, screens, phones).
 - Panels with no text still get an entry with an empty lines list."""
@@ -138,9 +144,12 @@ class Reader:
         return self._call(self.tag_model, parts, IssueContents)
 
     def read_page(self, image: bytes, mime: str, strip: str, arc: str, cast_names: list[str],
-                  series: str = "2000 AD") -> PageScript:
+                  series: str = "2000 AD", context: str = "") -> PageScript:
+        """context: what earlier pages of the episode established (see narrate._context_so_far), so a character
+        keeps one name, voice and accent from page to page."""
         from google.genai import types
 
-        prompt = READ_PROMPT.format(series=series, strip=strip, arc=arc, cast=", ".join(cast_names) or "(none)")
+        prompt = READ_PROMPT.format(series=series, strip=strip, arc=arc, cast=", ".join(cast_names) or "(none)",
+                                    context=context)
         parts = [types.Part.from_bytes(data=image, mime_type=mime), prompt]
         return self._call(self.read_model, parts, PageScript)

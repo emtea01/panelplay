@@ -1,6 +1,7 @@
 # Everyone on ElevenLabs (use with --cast cast-elevenlabs.yaml). Voices are ElevenLabs voice IDs:
 # the built-in ("premade") voices plus your own designed ones work on the free API.
-# fx: robot | radio | none.  Lines are cached in work/tts_cache, so re-renders don't spend credits.
+# fx: robot | radio | none.  accent: e.g. German (an ElevenLabs v3 tag; the reader also spots accents
+# spelt out in the lettering, line by line).  Lines are cached in work/tts_cache, so re-renders don't spend credits.
 engine: elevenlabs
 
 narrator:

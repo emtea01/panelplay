@@ -195,8 +195,12 @@ def line_request(cast: Cast, line: dict) -> tuple[dict, str, float]:
     v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"])
     speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(line.get("delivery", "normal"), 1.0)
     text = line["text"]
-    if line.get("tag") and v.get("engine") == "elevenlabs":
-        text = f"[{line['tag']}] {text}"  # ElevenLabs v3 audio tag, e.g. "screams in agony"; other engines skip it
+    if v.get("engine") == "elevenlabs":  # ElevenLabs v3 audio tags; other engines skip them
+        if line.get("tag"):
+            text = f"[{line['tag']}] {text}"  # e.g. "screams in agony"
+        accent = v.get("accent") or line.get("accent")  # a cast entry's accent wins over the reader's
+        if accent:
+            text = f"[strong {accent} accent] {text}"
     return v, text, speed
 
 

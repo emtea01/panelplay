@@ -143,7 +143,8 @@ def main():
             print(f"  reading page {pg}")
             emit("stage", prog=prog, stage="read", detail=f"reading page {pg} ({pages.index(pg) + 1} of {len(pages)})")
             img, mime = source.page(book_(), pg)
-            script = get_reader().read_page(img, mime, args.strip, args.arc, cast.names, args.series)
+            script = get_reader().read_page(img, mime, args.strip, args.arc, cast.names, args.series,
+                                            _context_so_far(pdir, pages[:pages.index(pg)]))
             sfile.write_text(json.dumps(script.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
         if args.stage == "read":
             continue
@@ -154,7 +155,8 @@ def main():
             continue
 
         # 3. Render.
-        scripts = [json.loads((pdir / f"page_{pg:03d}.json").read_text(encoding="utf-8")) for pg in pages]
+        scripts = _same_accent_throughout(
+            [json.loads((pdir / f"page_{pg:03d}.json").read_text(encoding="utf-8")) for pg in pages])
         _write_transcript(pdir / "transcript.txt", scripts)
         images = [load_image(source.page(book_(), pg)[0]) for pg in pages]
 
@@ -190,6 +192,44 @@ def main():
         _write_artwork(renderer, images[0], scripts[0], out)
         print("  done")
         emit("episode_done", prog=prog, episode=ep, path=str(out))
+
+
+def _same_accent_throughout(scripts):
+    """The reader marks an accent on the lines whose spelling shows it ("Ze robot!"), not on plain ones
+    ("Easily corrected!"). Give a character's accent to all their lines, so the voice doesn't drift."""
+    accents = {}
+    for s in scripts:
+        for p in s["panels"]:
+            for ln in p["lines"]:
+                if ln.get("accent") and ln["kind"] in ("speech", "thought"):
+                    accents.setdefault(ln["speaker"], ln["accent"])
+    for s in scripts:
+        for p in s["panels"]:
+            for ln in p["lines"]:
+                if ln["kind"] in ("speech", "thought") and ln["speaker"] in accents:
+                    ln["accent"] = accents[ln["speaker"]]
+    return scripts
+
+
+def _context_so_far(pdir: Path, pages) -> str:
+    """Prompt lines for reading the next page: the speakers so far (with accents), and how the last page ended,
+    which is often where a character is named ("Today, Doctor Arnold Wisenheimer will operate...")."""
+    seen, last = {}, []
+    for pg in pages:
+        f = pdir / f"page_{pg:03d}.json"
+        if not f.exists():
+            continue
+        for p in json.loads(f.read_text(encoding="utf-8"))["panels"]:
+            for ln in p["lines"]:
+                if ln["kind"] in ("speech", "thought"):
+                    seen[ln["speaker"]] = seen.get(ln["speaker"]) or ln.get("accent")
+                if ln["kind"] != "sfx":
+                    last = (last + [f'{ln["speaker"]}: "{ln["text"]}"'])[-4:]
+    if not seen and not last:
+        return ""
+    who = ", ".join(f"{name} ({accent} accent)" if accent else name for name, accent in seen.items())
+    return ((f"\n- Characters on earlier pages, by the names to keep using: {who}." if who else "")
+            + ("\n- The previous page ended: " + " / ".join(last) if last else ""))
 
 
 def _check_credits(tts, cast, lines, prog):
