@@ -79,13 +79,14 @@ def main():
     # The story's casting brief (made by the portal): names for the reader to use, accents for the voices.
     brief_file, cast_note = arc_dir / "characters.json", ""
     if brief_file.exists():
-        characters = json.loads(brief_file.read_text(encoding="utf-8"))["characters"]
+        brief = json.loads(brief_file.read_text(encoding="utf-8"))
+        characters = brief["characters"]
         # A cast file name wins ("Walter the Wobot" is the cast's Walter, "Judge Joseph Dredd" is Judge Dredd).
         for c in characters:
             words = set(c["name"].lower().split())
             c["name"] = next((n for n in cast.names if set(n.lower().split()) <= words), c["name"])
         characters = list({c["name"]: c for c in characters}.values())
-        cast.use_brief(characters)
+        cast.use_brief(characters, brief.get("pronounce", []))
         if characters:
             cast_note = ("\n- Characters in this story, by the names to use: "
                          + ", ".join(c["name"] + (f" ({c['accent']} accent)" if c.get("accent") else "")

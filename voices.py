@@ -1,6 +1,7 @@
 """Text-to-speech with a cast list. Kokoro runs on CPU, ElevenLabs in the cloud (per character); 'fake' makes tones."""
 import hashlib
 import os
+import re
 import subprocess
 import unicodedata
 from pathlib import Path
@@ -18,6 +19,15 @@ def _name_key(name: str) -> str:
     return "".join(ch for ch in unicodedata.normalize("NFKD", name) if not unicodedata.combining(ch)).lower().strip()
 
 
+_VARIANTS = {"a": "áàâäãå", "e": "éèêë", "i": "íìîï", "o": "óòôöõø", "u": "úùûü", "n": "ñ", "c": "ç", "y": "ýÿ"}
+
+
+def _loose_name(key: str) -> re.Pattern:
+    """The name as a whole word, with or without its accents, in any case."""
+    return re.compile(r"(?<!\w)" + "".join(f"[{re.escape(ch)}{_VARIANTS.get(ch, '')}]" if ch.isalpha() else re.escape(ch)
+                                            for ch in key) + r"(?!\w)", re.I)
+
+
 class Cast:
     def __init__(self, cast_file: Path, assigned_file: Path):
         data = yaml.safe_load(cast_file.read_text(encoding="utf-8"))
@@ -25,19 +35,29 @@ class Cast:
         self.narrator = data["narrator"]
         self.characters = {k.lower(): v for k, v in (data.get("characters") or {}).items()}
         self.names = list((data.get("characters") or {}).keys())
+        # Names respelt as said ("Sláine: Slawn-ya"), so every line says them the same way.
+        self.pronounce = {_name_key(k): v for k, v in (data.get("pronounce") or {}).items()}
+        self.story_accents = {}
         self.pools = data["pools"]
         self.assigned_file = assigned_file
         self.assigned = {}
         if assigned_file.exists():
             self.assigned = {k.lower(): v for k, v in (yaml.safe_load(assigned_file.read_text(encoding="utf-8")) or {}).items()}
 
-    def use_brief(self, characters: list[dict]):
-        """Accents from the story's casting brief (portal/brief.py), for characters the cast file doesn't give one."""
+    def use_brief(self, characters: list[dict], pronounce: list[dict] = ()):
+        """Accents and pronunciations from the story's casting brief (portal/brief.py), where the cast file
+        doesn't give them."""
         self.story_accents = {_name_key(c["name"]): c["accent"] for c in characters if c.get("accent")}
+        self.pronounce = {**{_name_key(w["word"]): w["say_as"] for w in pronounce}, **self.pronounce}
+
+    def respell(self, text: str) -> str:
+        for key, say_as in self.pronounce.items():
+            text = _loose_name(key).sub(say_as, text)
+        return text
 
     def voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
         v = self._voice_for(speaker, speaker_type, kind)
-        accent = getattr(self, "story_accents", {}).get(_name_key(speaker))
+        accent = self.story_accents.get(_name_key(speaker))
         if accent and not v.get("accent") and kind != "caption":
             v = {**v, "accent": accent}
         return {"engine": self.engine, **v} if self.engine else v
@@ -207,7 +227,7 @@ def line_request(cast: Cast, line: dict) -> tuple[dict, str, float]:
     """(cast entry, text to send, speed) for one line."""
     v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"])
     speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(line.get("delivery", "normal"), 1.0)
-    text = line["text"]
+    text = cast.respell(line["text"])
     if v.get("engine") == "elevenlabs":  # ElevenLabs v3 audio tags; other engines skip them
         if line.get("tag"):
             text = f"[{line['tag']}] {text}"  # e.g. "screams in agony"

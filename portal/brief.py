@@ -22,8 +22,14 @@ class Character(BaseModel):
     notes: str = Field(description="A few words on how they sound: age, manner")
 
 
+class Word(BaseModel):
+    word: str = Field(description="A name as the comic spells it")
+    say_as: str = Field(description="Respelt in plain English syllables, stressed syllable first, e.g. 'Slawn-ya'")
+
+
 class Brief(BaseModel):
     characters: list[Character]
+    pronounce: list[Word] = Field(default_factory=list)
 
 
 PROMPT = """We're making an audio drama of the {strip} story "{title}" from the comic "{series}" ({issues}).
@@ -36,7 +42,11 @@ For each give:
   accent. Null when there's no particular accent (most Mega-City One citizens, for instance).
 - notes: a few words on how they sound (age, manner).
 Only list characters you're confident appear in this story or are regulars of the strip at the time.
-If you don't know the story, list the strip's regulars only; return an empty list rather than guess."""
+If you don't know the story, list the strip's regulars only; return an empty list rather than guess.
+Also list under pronounce the names in the story (characters, places, peoples, gods) a voice actor would likely
+say wrong from the spelling, each respelt the way the comic's creators say it, in plain English syllables a
+text-to-speech voice will read right (e.g. Sláine -> "Slawn-ya", Tir-Nan-Og -> "Teer-nan-ogue"). Leave out
+names any English reader says right."""
 
 
 def _cv_characters(s: dict, series: dict, progs: list[int]) -> list[str]:
@@ -103,3 +113,5 @@ def make(s: dict, series: dict, arc: dict, arc_dir: Path, log) -> None:
     out.write_text(json.dumps(brief.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
     log("Casting brief: " + (", ".join(c.name + (f" ({c.accent})" if c.accent else "") for c in brief.characters)
                              or "no characters known") + "\n")
+    if brief.pronounce:
+        log("Saying: " + ", ".join(f"{w.word} as {w.say_as}" for w in brief.pronounce) + "\n")
