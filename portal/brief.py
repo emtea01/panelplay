@@ -18,6 +18,7 @@ BRIEF_FILE = "characters.json"
 class Character(BaseModel):
     name: str = Field(description="The name as the comic spells it")
     gender: Literal["male", "female", "robot", "unknown"]
+    age: Optional[Literal["young", "middle_aged", "old"]] = None
     accent: Optional[str] = Field(None, description="e.g. 'Irish', 'Scottish', 'German', or null for none in particular")
     notes: str = Field(description="A few words on how they sound: age, manner")
 
@@ -29,6 +30,8 @@ class Word(BaseModel):
 
 class Brief(BaseModel):
     characters: list[Character]
+    world_accent: Optional[str] = Field(None, description="The accent of everyone else in the story's world")
+    narrator: Optional[str] = Field(None, description="The character whose voice the captions are written in")
     pronounce: list[Word] = Field(default_factory=list)
 
 
@@ -36,11 +39,18 @@ PROMPT = """We're making an audio drama of the {strip} story "{title}" from the 
 List the characters likely to speak in it, from what you know of the comic.{cv}
 For each give:
 - name: as the comic spells it.
-- gender.
-- accent: the accent their voice should have when the comic establishes or clearly implies one through their
-  nationality, culture or homeland (e.g. Irish, Scottish, German, Russian). Give people of one culture the same
-  accent. Null when there's no particular accent (most Mega-City One citizens, for instance).
-- notes: a few words on how they sound (age, manner).
+- gender, and age (young, middle_aged or old).
+- accent: a real-world accent for their voice, from their nationality, culture or homeland as the comic shows
+  or implies it (e.g. Irish, Scottish, Welsh, German, Russian, Southern US). When the story's world is modelled
+  on a real culture (Celtic Britain and Ireland, Rome, the Soviet Union, the Wild West), its people get that
+  culture's accents: never a generic American voice for them. Outsiders and foreigners get their own accents.
+  Null only when an ordinary American voice is right (most Mega-City One citizens, for instance).
+- notes: a few words on how they sound (manner, timbre).
+Also give:
+- world_accent: the accent for everyone in the story you haven't listed (the people of its world), or null.
+- narrator: the character the captions are spoken by, when the strip is told in a character's voice (Ukko
+  tells Slaine's saga, for instance), else null. They must be in the list.
+List the characters most important first.
 Only list characters you're confident appear in this story or are regulars of the strip at the time.
 If you don't know the story, list the strip's regulars only; return an empty list rather than guess.
 Also list under pronounce the names in the story (characters, places, peoples, gods) a voice actor would likely
@@ -110,6 +120,8 @@ def make(s: dict, series: dict, arc: dict, arc_dir: Path, log) -> None:
     arc_dir.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(brief.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
     log("Casting brief: " + (", ".join(c.name + (f" ({c.accent})" if c.accent else "") for c in brief.characters)
-                             or "no characters known") + "\n")
+                             or "no characters known")
+        + (f"; everyone else {brief.world_accent}" if brief.world_accent else "")
+        + (f"; narrated by {brief.narrator}" if brief.narrator else "") + "\n")
     if brief.pronounce:
         log("Saying: " + ", ".join(f"{w.word} as {w.say_as}" for w in brief.pronounce) + "\n")

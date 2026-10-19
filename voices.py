@@ -1,5 +1,6 @@
 """Text-to-speech with a cast list. Kokoro runs on CPU, ElevenLabs in the cloud (per character); 'fake' makes tones."""
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -37,45 +38,88 @@ class Cast:
         self.names = list((data.get("characters") or {}).keys())
         # Names respelt as said ("Sláine: Slawn-ya"), so every line says them the same way.
         self.pronounce = {_name_key(k): v for k, v in (data.get("pronounce") or {}).items()}
-        self.story_accents = {}
+        self.story_accents, self.story_ages = {}, {}
+        self.world_accent = None    # the accent of anyone in the story the brief doesn't list
+        self.story_narrator = None  # (name, gender) of the character whose voice the captions are in
+        self.library = None         # VoiceLibrary: native-accent voices from ElevenLabs' shared library
+        self.used = set()           # voices given to this story's characters, so no two share one
         self.pools = data["pools"]
         self.assigned_file = assigned_file
         self.assigned = {}
         if assigned_file.exists():
             self.assigned = {k.lower(): v for k, v in (yaml.safe_load(assigned_file.read_text(encoding="utf-8")) or {}).items()}
 
-    def use_brief(self, characters: list[dict], pronounce: list[dict] = ()):
-        """Accents and pronunciations from the story's casting brief (portal/brief.py), where the cast file
-        doesn't give them."""
+    def use_brief(self, brief: dict):
+        """Accents, ages, the narrator and pronunciations from the story's casting brief (portal/brief.py),
+        where the cast file doesn't give them."""
+        characters = brief.get("characters", [])
         self.story_accents = {_name_key(c["name"]): c["accent"] for c in characters if c.get("accent")}
-        self.pronounce = {**{_name_key(w["word"]): w["say_as"] for w in pronounce}, **self.pronounce}
+        self.story_ages = {_name_key(c["name"]): c["age"] for c in characters if c.get("age")}
+        self.world_accent = brief.get("world_accent")
+        teller = next((c for c in characters if brief.get("narrator") and _name_key(c["name"]) == _name_key(brief["narrator"])),
+                      None)
+        self.story_narrator = (teller["name"], teller["gender"]) if teller else None
+        # "OOK-koh" -> "Ook-koh": a voice may spell out capitals.
+        self.pronounce = {**{_name_key(w["word"]): w["say_as"][:1].upper() + w["say_as"][1:].lower()
+                             for w in brief.get("pronounce", [])}, **self.pronounce}
+
+    def precast(self, characters: list[dict]) -> list[str]:
+        """Give the brief's characters their voices in its order (leads first, so they get the best match).
+        Returns a line per character for the log."""
+        out = []
+        for c in characters:
+            v = self.voice_for(c["name"], c["gender"], "speech")
+            out.append(f"{c['name']}: {v.get('voice_name') or v['voice']}"
+                       + (f" ({v['native_accent']} voice)" if v.get("native_accent")
+                          else f" (+ {v['accent']} accent tag)" if v.get("accent") else ""))
+        return out
+
+    def _accent_for(self, speaker: str, speaker_type: str) -> str | None:
+        key = _name_key(speaker)
+        if key in self.characters:
+            return self.characters[key].get("accent")
+        return self.story_accents.get(key) or (self.world_accent if speaker_type != "robot" else None)
 
     def respell(self, text: str) -> str:
         for key, say_as in self.pronounce.items():
             text = _loose_name(key).sub(say_as, text)
         return text
 
-    def voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
-        v = self._voice_for(speaker, speaker_type, kind)
-        accent = self.story_accents.get(_name_key(speaker))
-        if accent and not v.get("accent") and kind != "caption":
-            v = {**v, "accent": accent}
+    def voice_for(self, speaker: str, speaker_type: str, kind: str, line_accent: str | None = None) -> dict:
+        """line_accent: the accent the reader saw spelt out in this line ("Ze robot!"), used when neither the
+        cast file nor the brief gives the character one."""
+        if speaker == "Title":  # the episode's title card: always the series narrator
+            v = self.narrator
+        elif kind == "caption" or speaker.lower() in ("narrator", "caption"):
+            if self.story_narrator:  # captions in a character's voice (Ukko tells Sláine's saga)
+                return self.voice_for(*self.story_narrator, "speech")
+            v = self.narrator
+        else:
+            accent = self._accent_for(speaker, speaker_type) or line_accent
+            v = self._voice_for(speaker, speaker_type, accent)
+            accent = accent or v.get("for_accent")
+            if accent:
+                v = {**v, "accent": accent}
         return {"engine": self.engine, **v} if self.engine else v
 
-    def _voice_for(self, speaker: str, speaker_type: str, kind: str) -> dict:
-        if kind == "caption" or speaker.lower() in ("narrator", "caption"):
-            return self.narrator
+    def _voice_for(self, speaker: str, speaker_type: str, accent: str | None) -> dict:
         key = speaker.lower().strip()
         if key in self.characters:
             return self.characters[key]
-        if key not in self.assigned:
-            pool = self.pools.get(speaker_type) or self.pools["unknown"]
-            idx = int(hashlib.md5(key.encode()).hexdigest(), 16) % len(pool)
-            v = {"voice": pool[idx], "speed": 1.0}
-            if speaker_type == "robot":
-                v["fx"] = "robot"
-            self.assigned[key] = v
+        # A voice picked for another accent (or before accents were known) is picked again. A character keeps
+        # their accent in an episode whose lettering doesn't show it.
+        if key not in self.assigned or (accent and self.assigned[key].get("for_accent") != accent):
+            v = None
+            if accent and self.library and speaker_type in ("male", "female"):
+                v = self.library.pick(accent, speaker_type, self.story_ages.get(_name_key(speaker)), self.used)
+            if not v:
+                pool = self.pools.get(speaker_type) or self.pools["unknown"]
+                v = {"voice": pool[int(hashlib.md5(key.encode()).hexdigest(), 16) % len(pool)], "speed": 1.0}
+                if speaker_type == "robot":
+                    v["fx"] = "robot"
+            self.assigned[key] = {**v, "for_accent": accent}
             self._save()
+        self.used.add(self.assigned[key]["voice"])
         return self.assigned[key]
 
     def _save(self):
@@ -86,6 +130,49 @@ class Cast:
             + yaml.safe_dump(self.assigned, sort_keys=True),
             encoding="utf-8",
         )
+
+
+class VoiceLibrary:
+    """Native-accent voices from ElevenLabs' shared voice library (usable by ID on a paid plan, no voice slot
+    needed). An Irish voice sounds Irish; an American one told "[strong Irish accent]" sounds American-Irish."""
+    GOOD_USES = ("narrative_story", "characters_animation", "conversational")
+    ACCENTS = {"celtic": "irish", "gaelic": "irish", "northern irish": "irish", "english": "british"}
+
+    def __init__(self, api_key: str, cache_dir: Path):
+        self.key, self.cache = api_key, cache_dir
+
+    @classmethod
+    def norm(cls, accent: str) -> str:
+        """'Irish (Connacht)' -> 'irish', 'Celtic' -> 'irish': the library's accent names."""
+        accent = accent.lower().split("(")[0].strip()
+        return cls.ACCENTS.get(accent, accent)
+
+    def _voices(self, accent: str, gender: str) -> list[dict]:
+        accent = self.norm(accent)
+        f = self.cache / f"{re.sub(r'[^a-z]+', '_', accent)}_{gender}.json"
+        if f.exists():
+            return json.loads(f.read_text(encoding="utf-8"))
+        import requests
+
+        r = requests.get("https://api.elevenlabs.io/v1/shared-voices", headers={"xi-api-key": self.key}, timeout=30,
+                         params={"accent": accent, "gender": gender, "page_size": 40, "sort": "usage_character_count_1y"})
+        voices = [{k: v.get(k) for k in ("voice_id", "name", "age", "use_case", "accent")}
+                  for v in (r.json().get("voices", []) if r.ok else [])]
+        if r.ok:
+            self.cache.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps(voices), encoding="utf-8")
+        return voices
+
+    def pick(self, accent: str, gender: str, age: str | None, exclude: set) -> dict | None:
+        """The most-used voice of that accent and gender, preferring the right age and storytelling voices,
+        that nobody else in the story has."""
+        voices = [v for v in self._voices(accent, gender) if v["voice_id"] not in exclude]
+        if not voices:
+            return None
+        best = min(voices, key=lambda v: ((v["age"] != age) if age else 0, v["use_case"] not in self.GOOD_USES,
+                                         voices.index(v)))
+        return {"voice": best["voice_id"], "voice_name": best["name"].split(" - ")[0], "speed": 1.0,
+                "native_accent": self.norm(accent)}
 
 
 class KokoroTTS:
@@ -225,14 +312,14 @@ def make_tts(engine: str, el_cfg: dict | None = None, cache_dir: Path | None = N
 
 def line_request(cast: Cast, line: dict) -> tuple[dict, str, float]:
     """(cast entry, text to send, speed) for one line."""
-    v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"])
+    v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"], line.get("accent"))
     speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(line.get("delivery", "normal"), 1.0)
     text = cast.respell(line["text"])
     if v.get("engine") == "elevenlabs":  # ElevenLabs v3 audio tags; other engines skip them
         if line.get("tag"):
             text = f"[{line['tag']}] {text}"  # e.g. "screams in agony"
-        accent = v.get("accent") or line.get("accent")  # a cast entry's accent wins over the reader's
-        if accent:
+        accent = v.get("accent")
+        if accent and VoiceLibrary.norm(accent) != v.get("native_accent"):  # a native voice needs no telling
             text = f"[strong {accent} accent] {text}"
     return v, text, speed
 

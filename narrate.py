@@ -10,6 +10,7 @@ Each prog becomes one episode. Work is cached under work/, so re-runs only redo 
 """
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 
@@ -85,8 +86,14 @@ def main():
         for c in characters:
             words = set(c["name"].lower().split())
             c["name"] = next((n for n in cast.names if set(n.lower().split()) <= words), c["name"])
-        characters = list({c["name"]: c for c in characters}.values())
-        cast.use_brief(characters, brief.get("pronounce", []))
+        brief["characters"] = characters = list({c["name"]: c for c in characters}.values())
+        cast.use_brief(brief)
+        el_key = (cfg.get("elevenlabs") or {}).get("api_key") or os.environ.get("ELEVENLABS_API_KEY")
+        if el_key and (args.tts or cfg["tts"]["engine"]) != "fake" and cast.engine == "elevenlabs":
+            from voices import VoiceLibrary
+            cast.library = VoiceLibrary(el_key, work / "voice_library")
+        if args.stage in ("render", "all"):
+            print("Cast: " + "; ".join(cast.precast(characters)))
         if characters:
             cast_note = ("\n- Characters in this story, by the names to use: "
                          + ", ".join(c["name"] + (f" ({c['accent']} accent)" if c.get("accent") else "")

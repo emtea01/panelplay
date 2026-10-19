@@ -145,7 +145,7 @@ class Renderer:
 
     @staticmethod
     def _title_line(text):
-        return {"kind": "caption", "speaker": "Narrator", "text": text}
+        return {"kind": "caption", "speaker": "Title", "text": text}  # the series narrator, not the story's
 
     def panel_audio(self, lines, lead=PANEL_LEAD):
         parts = []
