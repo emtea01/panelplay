@@ -15,7 +15,7 @@ characters:
 # Names respelt the way they're said, so every line says them the same way (this wins over the
 # pronunciations Gemini suggests in a story's casting brief).
 pronounce:
-  Sláine: Slawn-ya
+  Sláine: Slah-nya
 
 # Anyone not listed gets a voice from these pools, picked consistently by name.
 # Assignments are saved to work/cast-elevenlabs_assigned.yaml so you can tweak them later.
