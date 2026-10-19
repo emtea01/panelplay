@@ -19,13 +19,13 @@ def _pure(p: str):
 
 
 def target(s: dict) -> tuple[str, str, str]:
-    """(library key, library title, the episodes folder as Plex sees it) for the TV library that holds the
-    output folder. Plex may see the folder under another path (its own mount), so unless Settings says where,
-    match the library folder with the same name as ours."""
-    libs = [d for d in _get(s, "/library/sections").json()["MediaContainer"].get("Directory", [])
-            if d["type"] == "show"]
+    """(library key, library title, the episodes folder as Plex sees it) for the library that holds the
+    output folder, of any type (TV Shows groups episodes into seasons; Other Videos just lists the files).
+    Plex may see the folder under another path (its own mount), so unless Settings says where, match the
+    library folder with the same name as ours."""
+    libs = _get(s, "/library/sections").json()["MediaContainer"].get("Directory", [])
     if not libs:
-        raise RuntimeError("Plex has no TV libraries.")
+        raise RuntimeError("Plex has no libraries.")
     if s.get("plex_folder"):
         want = _pure(s["plex_folder"])
         for lib in libs:
@@ -33,7 +33,7 @@ def target(s: dict) -> tuple[str, str, str]:
                 lp = _pure(loc["path"])
                 if want == lp or lp in want.parents:
                     return lib["key"], lib["title"], s["plex_folder"]
-        raise RuntimeError(f"No Plex TV library contains {s['plex_folder']}.")
+        raise RuntimeError(f"No Plex library contains {s['plex_folder']}.")
     name = Path(s["output_path"]).name.lower()
     hits = [(lib["key"], lib["title"], loc["path"]) for lib in libs for loc in lib.get("Location", [])
             if _pure(loc["path"]).name.lower() == name]
