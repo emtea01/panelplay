@@ -370,7 +370,8 @@ def _import_index(refresh=False):
 def test_setting(what: str):
     s = S.current(db)
     ok, msg = False, ""
-    key = {"gemini": "gemini_api_key", "elevenlabs": "elevenlabs_api_key", "comicvine": "comicvine_api_key"}.get(what)
+    key = {"gemini": "gemini_api_key", "elevenlabs": "elevenlabs_api_key", "comicvine": "comicvine_api_key",
+           "plex": "plex_token"}.get(what)
     if key and not s.get(key):
         return '<span class="test bad">✗ No key saved yet.</span>'
     try:
@@ -416,6 +417,13 @@ def test_setting(what: str):
                 data = {"error": f"HTTP {r.status_code}: Comic Vine didn't send a JSON reply"}
             ok = data.get("status_code") == 1
             msg = "Working." if ok else data.get("error", f"HTTP {r.status_code}")
+        elif what == "plex":
+            from . import plex
+
+            if not s["plex_url"]:
+                raise RuntimeError("Set the Plex server URL first.")
+            _, title, folder = plex.target(s)
+            ok, msg = True, f"Working. New episodes will be scanned into “{title}” (Plex sees the folder as {folder})."
         elif what == "komga":
             import library
 

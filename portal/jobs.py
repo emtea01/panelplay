@@ -131,6 +131,13 @@ class Runner:
                 elif kind == "episode_done":
                     done += 1
                     db.set_episode(arc["id"], ev["prog"], ev["episode"], "rendered", path=ev["path"], job_id=jid)
+                    if s["plex_url"] and s["plex_token"]:
+                        try:
+                            from . import plex
+
+                            db.append_log(jid, f"Asked Plex to scan {plex.scan(s, ev['path'])}\n")
+                        except Exception as e:  # the episode is fine either way
+                            db.append_log(jid, f"Couldn't ask Plex to scan: {e}\n")
                 elif kind == "prog_skip":
                     skipped += 1
                     db.set_episode(arc["id"], ev["prog"], ev["episode"], ev["reason"], detail=ev.get("detail", ""),

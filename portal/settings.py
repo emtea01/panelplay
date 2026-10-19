@@ -22,6 +22,10 @@ FIELDS = {
     "gemini_api_key":     ("Gemini API key", "", "secret"),
     "elevenlabs_api_key": ("ElevenLabs API key", "", "secret"),
     "comicvine_api_key":  ("Comic Vine API key", "", "secret"),
+    # Plex
+    "plex_url":          ("Plex server URL (blank = don't tell Plex about new episodes)", "", "text"),
+    "plex_token":        ("Plex token", "", "secret"),
+    "plex_folder":       ("The episodes folder as Plex sees it (blank = work it out)", "", "text"),
     # Reading
     "gemini_tag_model":  ("Gemini model for finding the strip's pages", "gemini-flash-lite-latest", "text"),
     "gemini_read_model": ("Gemini model for reading pages", "gemini-flash-latest", "text"),
@@ -45,6 +49,7 @@ GROUPS = [
     ("Library", ["source", "comics_path", "komga_url", "komga_api_key", "komga_user", "komga_password",
                  "komga_series", "output_path", "work_path"]),
     ("API keys", ["gemini_api_key", "elevenlabs_api_key", "comicvine_api_key"]),
+    ("Plex", ["plex_url", "plex_token", "plex_folder"]),
     ("Reading the pages", ["gemini_tag_model", "gemini_read_model", "gemini_rpm"]),
     ("Voices", ["cast_file", "tts_engine", "elevenlabs_model"]),
     ("Picture", ["render_width", "render_height", "render_fps", "motion", "punch", "page_intro", "read_sfx"]),

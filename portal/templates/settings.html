@@ -6,11 +6,12 @@
 {% if saved %}<div class="notice ok">Saved.</div>{% endif %}
 
 {% set tests = {'comics_path': 'archive', 'komga_series': 'komga', 'output_path': 'output', 'gemini_api_key': 'gemini',
-                'elevenlabs_api_key': 'elevenlabs', 'comicvine_api_key': 'comicvine'} %}
+                'elevenlabs_api_key': 'elevenlabs', 'comicvine_api_key': 'comicvine', 'plex_token': 'plex'} %}
 <form method="post" action="/settings">
   {% for group, keys in groups %}
   <fieldset>
     <legend>{{ group }}</legend>
+    {% if group == 'Plex' %}<p class="hint" style="margin-top:0">After each episode, ask Plex to scan its folder so it shows up straight away. URL like http://10.0.1.10:32400. For the token, open any item in Plex web → ⋯ → Get Info → View XML, and copy the X-Plex-Token value from the address bar.</p>{% endif %}
     {% if group == 'API keys' %}<p class="hint" style="margin-top:0">Stored in the portal's database on this machine. Leave a box empty to keep the saved key.</p>{% endif %}
     <div class="form-grid">
     {% for key in keys %}
