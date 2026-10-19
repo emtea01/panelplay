@@ -370,7 +370,7 @@ def _import_index(refresh=False):
 def test_setting(what: str):
     s = S.current(db)
     ok, msg = False, ""
-    key = {"gemini": "gemini_api_key", "elevenlabs": "elevenlabs_api_key", "comicvine": "comicvine_api_key",
+    key = {"gemini": "gemini_api_key", "gemini_paid": "gemini_paid_api_key", "elevenlabs": "elevenlabs_api_key", "comicvine": "comicvine_api_key",
            "plex": "plex_token"}.get(what)
     if key and not s.get(key):
         return '<span class="test bad">✗ No key saved yet.</span>'
@@ -388,10 +388,10 @@ def test_setting(what: str):
             probe.mkdir(parents=True, exist_ok=True)
             probe.rmdir()
             ok, msg = True, "Writable."
-        elif what == "gemini":
+        elif what in ("gemini", "gemini_paid"):
             from google import genai
 
-            client = genai.Client(api_key=s["gemini_api_key"])  # keep a reference, or it closes mid-request
+            client = genai.Client(api_key=s[key])  # keep a reference, or it closes mid-request
             r = client.models.generate_content(model=s["gemini_tag_model"], contents="Reply with just: ok")
             ok, msg = True, f"Working ({s['gemini_tag_model']} replied “{r.text.strip()[:20]}”)."
         elif what == "elevenlabs":

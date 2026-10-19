@@ -19,7 +19,8 @@ FIELDS = {
     "output_path":       ("Write finished episodes to (a Plex TV library folder)", "", "path"),
     "work_path":         ("Working folder (page scripts, voice cache)", "", "path"),
     # Keys
-    "gemini_api_key":     ("Gemini API key", "", "secret"),
+    "gemini_api_key":     ("Gemini API key, free (used first)", "", "secret"),
+    "gemini_paid_api_key": ("Gemini API key, paid (used once the free key's daily quota runs out)", "", "secret"),
     "elevenlabs_api_key": ("ElevenLabs API key", "", "secret"),
     "comicvine_api_key":  ("Comic Vine API key", "", "secret"),
     # Plex
@@ -48,7 +49,7 @@ FIELDS = {
 GROUPS = [
     ("Library", ["source", "comics_path", "komga_url", "komga_api_key", "komga_user", "komga_password",
                  "komga_series", "output_path", "work_path"]),
-    ("API keys", ["gemini_api_key", "elevenlabs_api_key", "comicvine_api_key"]),
+    ("API keys", ["gemini_api_key", "gemini_paid_api_key", "elevenlabs_api_key", "comicvine_api_key"]),
     ("Plex", ["plex_url", "plex_token", "plex_folder"]),
     ("Reading the pages", ["gemini_tag_model", "gemini_read_model", "gemini_rpm"]),
     ("Voices", ["cast_file", "tts_engine", "elevenlabs_model"]),
@@ -148,6 +149,8 @@ def renderer_env(s: dict) -> dict:
     env = {"PYTHONIOENCODING": "utf-8", "PYTHONWARNINGS": "ignore", "PYTHONUNBUFFERED": "1"}
     if s.get("gemini_api_key"):
         env["GEMINI_API_KEY"] = s["gemini_api_key"]
+    if s.get("gemini_paid_api_key"):
+        env["GEMINI_PAID_API_KEY"] = s["gemini_paid_api_key"]
     if s.get("elevenlabs_api_key"):
         env["ELEVENLABS_API_KEY"] = s["elevenlabs_api_key"]
     return env
@@ -162,6 +165,6 @@ def problems(s: dict) -> list[str]:
         out.append("Set the Komga URL (Settings → Library).")
     if not s["output_path"]:
         out.append("Set where finished episodes go (Settings → Library).")
-    if not s["gemini_api_key"]:
+    if not (s["gemini_api_key"] or s["gemini_paid_api_key"]):
         out.append("Add a Gemini API key (Settings → API keys).")
     return out

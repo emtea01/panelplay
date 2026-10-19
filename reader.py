@@ -84,14 +84,21 @@ class Reader:
     def __init__(self, cfg):
         from google import genai  # imported here so render-only runs don't need it
 
-        key = cfg.get("api_key") or os.environ.get("GEMINI_API_KEY")
-        if not key:
+        # The free key is used first; the paid one takes over once the free key's daily quota is used up.
+        keys = [k for k in (cfg.get("api_key") or os.environ.get("GEMINI_API_KEY"),
+                            cfg.get("paid_api_key") or os.environ.get("GEMINI_PAID_API_KEY")) if k]
+        if not keys:
             raise SystemExit("No Gemini API key: set gemini.api_key in config.yaml or GEMINI_API_KEY")
-        self.client = genai.Client(api_key=key)
+        self.clients = [genai.Client(api_key=k) for k in keys]
+        self.client = self.clients[0]
         self.tag_model = cfg["tag_model"]
         self.read_model = cfg["read_model"]
         self.min_gap = 60.0 / max(1, cfg.get("requests_per_minute", 8))
         self._last = 0.0
+
+    def ask(self, model, contents, schema):
+        """A JSON answer in the shape of schema, with the same rate limits and key fallback as page reading."""
+        return self._call(model, contents, schema)
 
     def _call(self, model, parts, schema):
         from google.genai import errors, types
@@ -112,6 +119,15 @@ class Reader:
                     return resp.parsed
                 return schema.model_validate(json.loads(resp.text))
             except errors.ClientError as e:
+                if getattr(e, "code", None) == 429 and "PerDay" in str(e):
+                    # The day's quota is gone: waiting won't help, the paid key (if there is one) will.
+                    if self.client is not self.clients[-1]:
+                        print("    free Gemini quota used up for today, switching to the paid key")
+                        self.client = self.clients[self.clients.index(self.client) + 1]
+                        continue
+                    raise RuntimeError("Gemini's daily quota is used up" + (
+                        "" if len(self.clients) > 1 else " (add a paid key in Settings to carry on)")
+                        + ". Re-run later, cached pages are kept.")
                 if getattr(e, "code", None) == 429:
                     delay = 30 * (attempt + 1)
                     print(f"    rate limited, waiting {delay}s")

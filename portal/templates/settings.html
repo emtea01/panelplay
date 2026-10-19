@@ -5,7 +5,7 @@
 <p class="sub">Where the comics are, where episodes go, your API keys, and how episodes look and sound.</p>
 {% if saved %}<div class="notice ok">Saved.</div>{% endif %}
 
-{% set tests = {'comics_path': 'archive', 'komga_series': 'komga', 'output_path': 'output', 'gemini_api_key': 'gemini',
+{% set tests = {'comics_path': 'archive', 'komga_series': 'komga', 'output_path': 'output', 'gemini_api_key': 'gemini', 'gemini_paid_api_key': 'gemini_paid',
                 'elevenlabs_api_key': 'elevenlabs', 'comicvine_api_key': 'comicvine', 'plex_token': 'plex'} %}
 <form method="post" action="/settings">
   {% for group, keys in groups %}

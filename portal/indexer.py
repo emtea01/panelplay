@@ -86,7 +86,7 @@ class Indexer:
         elif series.get("cv_id"):
             notes.append("no Comic Vine key, so Gemini only")
 
-        if not s.get("gemini_api_key"):
+        if not (s.get("gemini_api_key") or s.get("gemini_paid_api_key")):
             stories = cv_arcs
             notes.append("add a Gemini key to find the rest")
             paused = ""
@@ -166,7 +166,8 @@ class Indexer:
         sid = series["id"]
         cfg = S.renderer_config(s, series)
         src = KomgaSource(cfg["komga"]) if cfg["source"] == "komga" else FolderSource(cfg["folder"])
-        reader = Reader({"api_key": s["gemini_api_key"], "tag_model": s["gemini_tag_model"],
+        reader = Reader({"api_key": s["gemini_api_key"], "paid_api_key": s["gemini_paid_api_key"],
+                         "tag_model": s["gemini_tag_model"],
                          "read_model": s["gemini_read_model"], "requests_per_minute": s["gemini_rpm"]})
         cdir = contents_dir(s["work_path"], series)
         cdir.mkdir(parents=True, exist_ok=True)

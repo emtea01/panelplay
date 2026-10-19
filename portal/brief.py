@@ -93,20 +93,18 @@ def make(s: dict, series: dict, arc: dict, arc_dir: Path, log) -> None:
             log(f"Comic Vine credits {len(cv_names)} characters in these issues.\n")
         except Exception as e:
             log(f"Couldn't get characters from Comic Vine: {e}\n")
-    from google import genai
-    from google.genai import types
+    from reader import Reader
 
     issues = ", ".join(catalog.issue_label(series, p) for p in arc["progs"][:12])
     cv = ("\nComic Vine credits these characters in those issues (an anthology's issues include other strips' "
           "characters, so leave those out): " + ", ".join(cv_names[:80]) + ".") if cv_names else ""
     try:
-        client = genai.Client(api_key=s["gemini_api_key"])
-        r = client.models.generate_content(
-            model=s["gemini_read_model"],
-            contents=PROMPT.format(strip=arc["strip"], title=arc["title"], series=series["name"], issues=issues, cv=cv),
-            config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=Brief))
-        brief = Brief.model_validate_json(r.text)
-    except Exception as e:
+        reader = Reader({"api_key": s["gemini_api_key"], "paid_api_key": s.get("gemini_paid_api_key"),
+                         "tag_model": s["gemini_tag_model"], "read_model": s["gemini_read_model"]})
+        brief = reader.ask(s["gemini_read_model"],
+                           PROMPT.format(strip=arc["strip"], title=arc["title"], series=series["name"],
+                                         issues=issues, cv=cv), Brief)
+    except (Exception, SystemExit) as e:  # Reader raises SystemExit when there's no key at all
         log(f"Couldn't make a casting brief: {e}\n")
         return
     arc_dir.mkdir(parents=True, exist_ok=True)
