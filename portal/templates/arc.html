@@ -62,7 +62,7 @@
       {% for j in jobs %}
         <tr>
           <td><a href="/renders/{{ j.id }}">{{ j.id }}</a></td>
-          <td>{{ {'reread': 'Re-read and render', 'rest': 'Render the rest'}.get(j.mode, 'Render') }}{% if j.only_prog %} prog {{ j.only_prog }}{% endif %}</td>
+          <td>{{ {'reread': 'Re-read and render', 'rest': 'Render the rest', 'art': 'Refresh artwork'}.get(j.mode, 'Render') }}{% if j.only_prog %} prog {{ j.only_prog }}{% endif %}</td>
           <td><span class="badge {{ j.status if j.status != 'done' else 'done' }}">{{ j.status }}</span> <span class="hint">{{ j.progress }}</span></td>
           <td class="hide-sm hint">{{ j.created|when }}</td>
         </tr>
@@ -101,10 +101,15 @@
         <input type="hidden" name="mode" value="reread">
         <button>Re-read pages and render</button>
       </form>
+      <form method="post" action="/arcs/{{ arc.id }}/render">
+        <input type="hidden" name="mode" value="art">
+        <button title="Redo the Plex episode stills and show poster, without rendering the video again">Refresh artwork</button>
+      </form>
       {% endif %}
     </div>
     <p class="hint">Re-rendering reuses what Gemini read and any voices already made, so it only spends credits on
-      lines that changed. Re-reading asks Gemini to read the pages again.</p>
+      lines that changed. Re-reading asks Gemini to read the pages again. Refreshing artwork only redoes the Plex pictures,
+      in seconds.</p>
     {% endif %}
 
     <details class="edit">

@@ -67,11 +67,17 @@ class Runner:
             db.update_job(jid, status="failed", error=" ".join(missing), finished=time.time())
             return
         progs = arc["progs"] if not job["only_prog"] else [job["only_prog"]]
+        rendered = {p for p, e in db.episodes(arc["id"]).items() if e["status"] == "rendered"}
         if job["mode"] == "rest":
-            rendered = {p for p, e in db.episodes(arc["id"]).items() if e["status"] == "rendered"}
             progs = [p for p in arc["progs"] if p not in rendered]
             if not progs:
                 db.update_job(jid, status="done", progress="Every episode was already rendered.", finished=time.time())
+                return
+        if job["mode"] == "art":
+            progs = [p for p in progs if p in rendered]
+            if not progs:
+                db.update_job(jid, status="done", progress="No rendered episodes to redo the artwork of.",
+                              finished=time.time())
                 return
         if not arc["progs"]:
             db.update_job(jid, status="failed", error="This arc has no issue numbers the library can hold.",
@@ -103,7 +109,9 @@ class Runner:
                "--progs", catalog.format_progs(arc["progs"]).replace(" ", ""),
                "--plex", ",".join(f"{p}={se}x{e}" for p, (se, e) in numbers.items()),
                "--config", str(cfg_file), "--cast", str(S.ROOT / s["cast_file"])]
-        if job["only_prog"] or job["mode"] == "rest":
+        if job["mode"] == "art":
+            cmd += ["--stage", "art"]
+        if job["only_prog"] or job["mode"] in ("rest", "art"):
             cmd += ["--only", catalog.format_progs(progs).replace(" ", "")]
 
         db.update_job(jid, status="running", started=time.time(), progress="starting", log="", error="")
@@ -131,13 +139,10 @@ class Runner:
                 elif kind == "episode_done":
                     done += 1
                     db.set_episode(arc["id"], ev["prog"], ev["episode"], "rendered", path=ev["path"], job_id=jid)
-                    if s["plex_url"] and s["plex_token"]:
-                        try:
-                            from . import plex
-
-                            db.append_log(jid, f"Asked Plex to scan {plex.scan(s, ev['path'])}\n")
-                        except Exception as e:  # the episode is fine either way
-                            db.append_log(jid, f"Couldn't ask Plex to scan: {e}\n")
+                    self._tell_plex(s, jid, ev["path"])
+                elif kind == "art_done":
+                    done += 1
+                    self._tell_plex(s, jid, ev["path"], refresh=True)
                 elif kind == "prog_skip":
                     skipped += 1
                     db.set_episode(arc["id"], ev["prog"], ev["episode"], ev["reason"], detail=ev.get("detail", ""),
@@ -159,9 +164,21 @@ class Runner:
             if current_prog is not None and current_prog not in db.episodes(arc["id"]):
                 ep = arc["progs"].index(current_prog) + 1 if current_prog in arc["progs"] else 0
                 db.set_episode(arc["id"], current_prog, ep, "failed", detail=error, job_id=jid)
-        summary = f"{done} episode{'s' if done != 1 else ''} rendered" + (f", {skipped} skipped" if skipped else "")
+        summary = (f"{done} episode{'s' if done != 1 else ''} "
+                   + ("given new artwork" if job["mode"] == "art" else "rendered")) + (f", {skipped} skipped" if skipped else "")
         db.update_job(jid, status=status, error=error, progress=summary, finished=time.time())
         cfg_file.unlink(missing_ok=True)
+
+    def _tell_plex(self, s, jid, path, refresh=False):
+        if not (s["plex_url"] and s["plex_token"]):
+            return
+        try:
+            from . import plex
+
+            folder = plex.scan(s, path, refresh)
+            self.db.append_log(jid, f"Asked Plex to {'refresh' if refresh else 'scan'} {folder}\n")
+        except Exception as e:  # the episode is fine either way
+            self.db.append_log(jid, f"Couldn't ask Plex to scan: {e}\n")
 
 
 def _error_from(tail: list[str]) -> str:

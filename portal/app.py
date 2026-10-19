@@ -210,7 +210,7 @@ def arc_detail(request: Request, arc_id: int):
 def queue_render(arc_id: int, mode: str = Form("render"), prog: int | None = Form(None)):
     if not db.arc(arc_id):
         raise HTTPException(404)
-    if mode not in ("render", "rest", "reread"):
+    if mode not in ("render", "rest", "reread", "art"):
         raise HTTPException(400)
     db.add_job(arc_id, mode, prog)
     runner.poke()

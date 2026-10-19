@@ -4,6 +4,6 @@
 <p class="hint"><a href="/renders">← Renders</a></p>
 <h1>Render {{ job.id }}: {{ arc.title }}</h1>
 <p class="sub"><a href="/arcs/{{ arc.id }}">{{ arc.strip }}: {{ arc.title }}</a> ·
-  {{ {'reread': 'Re-read and render', 'rest': 'Render the rest'}.get(job.mode, 'Render') }}{% if job.only_prog %}, prog {{ job.only_prog }} only{% endif %}</p>
+  {{ {'reread': 'Re-read and render', 'rest': 'Render the rest', 'art': 'Refresh artwork'}.get(job.mode, 'Render') }}{% if job.only_prog %}, prog {{ job.only_prog }} only{% endif %}</p>
 <div id="live">{% include "_job_live.html" %}</div>
 {% endblock %}

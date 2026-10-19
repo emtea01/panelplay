@@ -47,7 +47,8 @@ def main():
     ap.add_argument("--work", help="this story's working folder (default: <paths.work>/<strip>--<arc>)")
     ap.add_argument("--season", type=int, default=1, help="Plex season number for this arc")
     ap.add_argument("--plex", help='Plex numbers per prog instead of --season, e.g. "10=1x9,11=1x10" (prog=SxE)')
-    ap.add_argument("--stage", choices=["tag", "read", "render", "all"], default="all")
+    ap.add_argument("--stage", choices=["tag", "read", "render", "art", "all"], default="all",
+                    help="art: only redo the Plex artwork of episodes already rendered")
     ap.add_argument("--only", help='process just these progs from the range, e.g. "10" or "11-13,15"')
     ap.add_argument("--config", default=str(HERE / "config.yaml"))
     ap.add_argument("--cast", default=str(HERE / "cast.yaml"))
@@ -114,7 +115,7 @@ def main():
         # 1. Which pages are this strip?
         tag_file = pdir / "tag.json"
         if not tag_file.exists():
-            if args.stage == "render":
+            if args.stage in ("render", "art"):
                 print("  no tag.json yet, skipping (run without --stage render first)")
                 continue
             n = source.page_count(book_())
@@ -137,7 +138,7 @@ def main():
         # 2. Read each page into a script.
         for pg in pages:
             sfile = pdir / f"page_{pg:03d}.json"
-            if sfile.exists() or args.stage == "render":
+            if sfile.exists() or args.stage in ("render", "art"):
                 continue
             print(f"  reading page {pg}")
             emit("stage", prog=prog, stage="read", detail=f"reading page {pg} ({pages.index(pg) + 1} of {len(pages)})")
@@ -158,7 +159,8 @@ def main():
         images = [load_image(source.page(book_(), pg)[0]) for pg in pages]
 
         engine = args.tts or cfg["tts"]["engine"]
-        renderer = Renderer(cfg["render"], make_tts(engine, cfg.get("elevenlabs"), work / "tts_cache"), cast)
+        tts = None if args.stage == "art" else make_tts(engine, cfg.get("elevenlabs"), work / "tts_cache")
+        renderer = Renderer(cfg["render"], tts, cast)
         # The arc's prog list is the authority; Gemini's printed part number is only a cross-check (it has
         # mistaken 2000 AD's "Thrill 3" corner badge for "Part 3").
         part = ep
@@ -169,6 +171,14 @@ def main():
         season, plex_ep = plex.get(prog, (args.season, ep))
         season_dir = Path(cfg["paths"]["plex"]) / show / f"Season {season:02d}"
         out = season_dir / f"{show} - s{season:02d}e{plex_ep:02d} - {safe(args.arc)} - Part {part}.mp4"
+        if args.stage == "art":
+            if not out.exists():
+                print(f"  {out.name} isn't rendered yet, skipping")
+                continue
+            _write_artwork(renderer, images[0], scripts[0], out)
+            print(f"  artwork redone for {out.name}")
+            emit("art_done", prog=prog, episode=ep, path=str(out))
+            continue
         season_dir.mkdir(parents=True, exist_ok=True)  # fail now, not after a long render, if it isn't writable
         print(f"  rendering -> {out}")
         total = sum(len(s["panels"]) for s in scripts)
@@ -176,16 +186,24 @@ def main():
                          f"{args.strip}. {args.arc}. Part {part}.", pdir / "segments", out,
                          progress=lambda n: emit("stage", prog=prog, stage="render", detail=f"panel {n} of {total}"))
 
-        # Artwork for Plex, from the strip itself: an issue's cover is usually another strip's.
-        try:
-            renderer.thumbnail(images[0], scripts[0]).save(out.with_suffix(".jpg"), quality=90)
-            poster = season_dir.parent / "poster.jpg"
-            if not poster.exists():
-                images[0].convert("RGB").save(poster, quality=90)
-        except Exception as e:  # artwork is a nice-to-have
-            print(f"  (couldn't save artwork: {e})")
+        _write_artwork(renderer, images[0], scripts[0], out)
         print("  done")
         emit("episode_done", prog=prog, episode=ep, path=str(out))
+
+
+def _write_artwork(renderer, first_page, first_script, out: Path):
+    """Artwork for Plex, from the strip itself (an issue's cover is usually another strip's): the episode's
+    still, and the show poster, which is the first page of the show's earliest episode."""
+    try:
+        renderer.thumbnail(first_page, first_script).save(out.with_suffix(".jpg"), quality=90)
+        show_dir = out.parent.parent
+        order = lambda f: tuple(int(n) for n in re.search(r"s(\d+)e(\d+)", f.name, re.I).groups())
+        episodes = sorted((f for f in show_dir.glob("Season */*.mp4") if re.search(r"s\d+e\d+", f.name, re.I)),
+                          key=order)
+        if not (show_dir / "poster.jpg").exists() or (episodes and episodes[0].name == out.name):
+            first_page.convert("RGB").save(show_dir / "poster.jpg", quality=90)
+    except Exception as e:  # artwork is a nice-to-have
+        print(f"  (couldn't save artwork: {e})")
 
 
 def _write_transcript(path: Path, scripts):

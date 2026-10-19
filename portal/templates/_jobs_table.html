@@ -7,7 +7,7 @@
       <td><a href="/renders/{{ j.id }}">{{ j.id }}</a></td>
       <td class="title-cell">
         <a href="/arcs/{{ j.arc_id }}">{{ j.title }}</a><br>
-        <span class="strip">{{ j.strip }} · {{ {'reread': 're-read and render', 'rest': 'render the rest'}.get(j.mode, 'render') }}{% if j.only_prog %}, prog {{ j.only_prog }} only{% endif %}</span>
+        <span class="strip">{{ j.strip }} · {{ {'reread': 're-read and render', 'rest': 'render the rest', 'art': 'refresh artwork'}.get(j.mode, 'render') }}{% if j.only_prog %}, prog {{ j.only_prog }} only{% endif %}</span>
       </td>
       <td>
         <span class="badge {{ j.status }}">{% if j.status == 'running' %}<span class="spinner"></span>{% endif %}{{ j.status }}</span>
