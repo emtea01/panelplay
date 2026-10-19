@@ -34,7 +34,7 @@ class Cast:
         data = yaml.safe_load(cast_file.read_text(encoding="utf-8"))
         self.engine = data.get("engine")  # default engine for every entry that doesn't name one
         self.narrator = data["narrator"]
-        self.characters = {k.lower(): v for k, v in (data.get("characters") or {}).items()}
+        self.characters = {_name_key(k): v for k, v in (data.get("characters") or {}).items()}
         self.names = list((data.get("characters") or {}).keys())
         # Names respelt as said ("Sláine: Slawn-ya"), so every line says them the same way.
         self.pronounce = {_name_key(k): v for k, v in (data.get("pronounce") or {}).items()}
@@ -103,9 +103,11 @@ class Cast:
         return {"engine": self.engine, **v} if self.engine else v
 
     def _voice_for(self, speaker: str, speaker_type: str, accent: str | None) -> dict:
+        if _name_key(speaker) in self.characters:
+            v = self.characters[_name_key(speaker)]
+            self.used.add(v["voice"])
+            return v
         key = speaker.lower().strip()
-        if key in self.characters:
-            return self.characters[key]
         # A voice picked for another accent (or before accents were known) is picked again. A character keeps
         # their accent in an episode whose lettering doesn't show it.
         if key not in self.assigned or (accent and self.assigned[key].get("for_accent") != accent):
