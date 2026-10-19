@@ -135,12 +135,22 @@ class Renderer:
         return im
 
     # ---------- sound ----------
+    def _spoken(self, ln) -> bool:
+        return bool(ln["text"].strip()) and (ln["kind"] != "sfx" or self.read_sfx)
+
+    def spoken_lines(self, scripts, title_line) -> list[dict]:
+        """Every line episode() will voice, title first."""
+        return [self._title_line(title_line)] + [ln for s in scripts for p in s["panels"] for ln in p["lines"]
+                                                 if self._spoken(ln)]
+
+    @staticmethod
+    def _title_line(text):
+        return {"kind": "caption", "speaker": "Narrator", "text": text}
+
     def panel_audio(self, lines, lead=PANEL_LEAD):
         parts = []
         for ln in lines:
-            if ln["kind"] == "sfx" and not self.read_sfx:
-                continue
-            if not ln["text"].strip():
+            if not self._spoken(ln):
                 continue
             if parts:
                 parts.append(silence(LINE_GAP))
@@ -201,7 +211,7 @@ class Renderer:
             self.segment(frame, audio, p, zoom_in)
             segs.append(p)
 
-        intro = speak_line(self.tts, self.cast, {"kind": "caption", "speaker": "Narrator", "text": title_line})
+        intro = speak_line(self.tts, self.cast, self._title_line(title_line))
         add(self.title_frame(strip, arc, part_label), np.concatenate([silence(0.6), intro, silence(1.0)]))
 
         n = 0

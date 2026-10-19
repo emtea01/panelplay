@@ -88,9 +88,25 @@ class ElevenLabsTTS:
         self.s = requests.Session()
         self.s.headers["xi-api-key"] = self.key
 
+    def _cache_file(self, text: str, voice: str) -> Path:
+        return self.cache / f"{hashlib.sha1(f'{self.model}|{voice}|{text}'.encode()).hexdigest()[:20]}.npy"
+
+    def is_cached(self, text: str, voice: str) -> bool:
+        return self._cache_file(text, voice).exists()
+
+    def credits_per_char(self) -> float:
+        return 0.5 if "flash" in self.model or "turbo" in self.model else 1.0
+
+    def credits_left(self) -> int | None:
+        """Credits left this month on the account, or None if the key can't read that (it needs User: read)."""
+        r = self.s.get("https://api.elevenlabs.io/v1/user/subscription", timeout=20)
+        if not r.ok:
+            return None
+        sub = r.json()
+        return sub["character_limit"] - sub["character_count"]
+
     def say(self, text: str, voice: str, speed: float) -> np.ndarray:
-        h = hashlib.sha1(f"{self.model}|{voice}|{text}".encode()).hexdigest()[:20]
-        f = self.cache / f"{h}.npy"
+        f = self._cache_file(text, voice)
         if f.exists():
             return np.load(f)
         r = self.s.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}",
@@ -120,12 +136,28 @@ class MultiTTS:
         self.default, self.el_cfg, self.cache_dir = default, el_cfg, cache_dir
         self.engines = {}
 
-    def say(self, text: str, voice: str, speed: float, engine: str | None = None) -> np.ndarray:
-        name = "fake" if self.default == "fake" else (engine or self.default)
+    def engine(self, name: str | None):
+        name = "fake" if self.default == "fake" else (name or self.default)
         if name not in self.engines:
             self.engines[name] = {"kokoro": KokoroTTS, "fake": FakeTTS,
                                   "elevenlabs": lambda: ElevenLabsTTS(self.el_cfg, self.cache_dir / "elevenlabs")}[name]()
-        return self.engines[name].say(text, voice, speed)
+        return self.engines[name]
+
+    def say(self, text: str, voice: str, speed: float, engine: str | None = None) -> np.ndarray:
+        return self.engine(engine).say(text, voice, speed)
+
+    def elevenlabs_needed(self, cast: "Cast", lines: list[dict]) -> tuple[int, "ElevenLabsTTS | None"]:
+        """Credits the ElevenLabs lines not yet in the cache will cost, and the engine (None if no line uses it)."""
+        todo = set()
+        for line in lines:
+            v, text, _ = line_request(cast, line)
+            if v.get("engine") == "elevenlabs" and self.default != "fake":
+                todo.add((text, v["voice"]))
+        if not todo:
+            return 0, None
+        el = self.engine("elevenlabs")
+        chars = sum(len(text) for text, voice in todo if not el.is_cached(text, voice))
+        return int(chars * el.credits_per_char() + 0.5), el
 
 
 class FakeTTS:
@@ -158,13 +190,19 @@ def make_tts(engine: str, el_cfg: dict | None = None, cache_dir: Path | None = N
     return MultiTTS(engine, el_cfg or {}, cache_dir or Path("work/tts_cache"))
 
 
-def speak_line(tts, cast: Cast, line: dict) -> np.ndarray:
+def line_request(cast: Cast, line: dict) -> tuple[dict, str, float]:
+    """(cast entry, text to send, speed) for one line."""
     v = cast.voice_for(line["speaker"], line.get("speaker_type", "unknown"), line["kind"])
-    delivery = line.get("delivery", "normal")
-    speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(delivery, 1.0)
+    speed = float(v.get("speed", 1.0)) * DELIVERY_SPEED.get(line.get("delivery", "normal"), 1.0)
     text = line["text"]
     if line.get("tag") and v.get("engine") == "elevenlabs":
         text = f"[{line['tag']}] {text}"  # ElevenLabs v3 audio tag, e.g. "screams in agony"; other engines skip it
+    return v, text, speed
+
+
+def speak_line(tts, cast: Cast, line: dict) -> np.ndarray:
+    v, text, speed = line_request(cast, line)
+    delivery = line.get("delivery", "normal")
     audio = tts.say(text, v["voice"], speed, engine=v.get("engine"))
     fx = v.get("fx") or ("radio" if delivery == "radio" else None)
     if fx:

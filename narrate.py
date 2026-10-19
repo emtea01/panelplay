@@ -180,15 +180,32 @@ def main():
             emit("art_done", prog=prog, episode=ep, path=str(out))
             continue
         season_dir.mkdir(parents=True, exist_ok=True)  # fail now, not after a long render, if it isn't writable
+        title_line = f"{args.strip}. {args.arc}. Part {part}."
+        _check_credits(tts, cast, renderer.spoken_lines(scripts, title_line), prog)
         print(f"  rendering -> {out}")
         total = sum(len(s["panels"]) for s in scripts)
-        renderer.episode(images, scripts, args.strip, args.arc, part_label,
-                         f"{args.strip}. {args.arc}. Part {part}.", pdir / "segments", out,
+        renderer.episode(images, scripts, args.strip, args.arc, part_label, title_line, pdir / "segments", out,
                          progress=lambda n: emit("stage", prog=prog, stage="render", detail=f"panel {n} of {total}"))
 
         _write_artwork(renderer, images[0], scripts[0], out)
         print("  done")
         emit("episode_done", prog=prog, episode=ep, path=str(out))
+
+
+def _check_credits(tts, cast, lines, prog):
+    """Stop before voicing an episode the ElevenLabs account can't pay for, rather than run out halfway."""
+    need, el = tts.elevenlabs_needed(cast, lines)
+    if not need:
+        return
+    left = el.credits_left()
+    if left is None:
+        print(f"  ElevenLabs: about {need} credits for this episode (the API key can't read the balance; "
+              "give it User: read access to have it checked)")
+        return
+    print(f"  ElevenLabs: about {need} credits for this episode, {left} left this month")
+    if need > left:
+        raise SystemExit(f"Not enough ElevenLabs credits for prog {prog}: it needs about {need}, the account has "
+                         f"{left} left this month. Nothing was spent on it.")
 
 
 def _write_artwork(renderer, first_page, first_script, out: Path):

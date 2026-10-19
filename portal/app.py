@@ -406,6 +406,14 @@ def test_setting(what: str):
                 raise RuntimeError(f"ElevenLabs HTTP {r.status_code}: {detail}")
             mine = [v["name"] for v in r.json()["voices"] if v.get("category") != "premade"]
             ok, msg = True, f"Working. {len(r.json()['voices'])} voices" + (f", yours: {', '.join(mine)}" if mine else "") + "."
+            sub = requests.get("https://api.elevenlabs.io/v1/user/subscription",
+                               headers={"xi-api-key": s["elevenlabs_api_key"]}, timeout=20)
+            if sub.ok:
+                sub = sub.json()
+                msg += (f" {sub['character_limit'] - sub['character_count']:,} of {sub['character_limit']:,} "
+                        "credits left this month.")
+            else:
+                msg += " (Can't see the credit balance: give the key User: read access, so renders can check it.)"
         elif what == "comicvine":
             r = requests.get("https://comicvine.gamespot.com/api/search/",
                              params={"api_key": s["comicvine_api_key"], "format": "json", "query": "2000 AD",
