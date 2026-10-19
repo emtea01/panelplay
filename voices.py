@@ -77,7 +77,7 @@ class Cast:
     def _accent_for(self, speaker: str, speaker_type: str) -> str | None:
         key = _name_key(speaker)
         if key in self.characters:
-            return self.characters[key].get("accent")
+            return self.characters[key].get("accent") or self.characters[key].get("native_accent")
         return self.story_accents.get(key) or (self.world_accent if speaker_type != "robot" else None)
 
     def respell(self, text: str) -> str:

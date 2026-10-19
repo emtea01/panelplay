@@ -12,7 +12,7 @@
       <td class="num">
         <form class="field-row" method="post" action="/voices/character">
           <input type="hidden" name="voice" value="{{ v.voice }}"><input type="hidden" name="voice_name" value="{{ v.short }}">
-          <input type="hidden" name="voice_only" value="1">
+          <input type="hidden" name="voice_only" value="1"><input type="hidden" name="native_accent" value="{{ v.accent }}">
           <input type="text" name="name" value="{{ for_name }}" placeholder="Character" required>
           <button class="small primary">Use</button>
         </form>

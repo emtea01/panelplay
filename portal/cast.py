@@ -59,6 +59,8 @@ def build(db, s: dict, out_dir: Path) -> Path:
             entry["fx"] = v["fx"]
         if v["accent"]:
             entry["accent"] = v["accent"]
+        if v["native_accent"]:
+            entry["native_accent"] = v["native_accent"].lower()
         if v["speed"] != 1.0:
             entry["speed"] = v["speed"]
         if v["name"].lower() == NARRATOR.lower():
@@ -71,6 +73,37 @@ def build(db, s: dict, out_dir: Path) -> Path:
     out = out_dir / s["cast_file"]
     out.write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return out
+
+
+def native_accent(s: dict, voice: str, voice_name: str = "") -> str | None:
+    """The voice's own accent as ElevenLabs labels it ('irish'), '' when it has none (a designed voice), or None
+    when it can't be found. Your own and built-in voices answer by ID; a library voice may only be found by
+    searching the library for its name."""
+    if not s.get("elevenlabs_api_key") or not voice:
+        return None
+    headers = {"xi-api-key": s["elevenlabs_api_key"]}
+    try:
+        r = requests.get(f"https://api.elevenlabs.io/v1/voices/{voice}", headers=headers, timeout=20)
+        if r.ok:
+            return ((r.json().get("labels") or {}).get("accent") or "").lower()
+        if voice_name:
+            r = requests.get("https://api.elevenlabs.io/v1/shared-voices", headers=headers, timeout=20,
+                             params={"search": voice_name, "page_size": 100})
+            for v in r.json().get("voices", []) if r.ok else []:
+                if v["voice_id"] == voice:
+                    return (v.get("accent") or "").lower()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def fill_native_accents(db, s: dict):
+    """Look up the accent of cast voices that haven't been looked up yet."""
+    for v in db.voices():
+        if v["native_accent"] is None:
+            found = native_accent(s, v["voice"], v["voice_name"])
+            if found is not None:
+                db.set_native_accent(v["name"], found)
 
 
 def assigned(s: dict) -> list[dict]:

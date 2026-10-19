@@ -7,10 +7,11 @@
 
 <h2 id="cast">Cast</h2>
 <p class="hint">The narrator reads the title of each episode, and the captions unless a story is told by one of its
-  characters. Accent is only for a voice that isn't natively that accent: it asks ElevenLabs to put the accent on.</p>
+  characters. <b>Own accent</b> is the voice's accent as ElevenLabs labels it. Set <b>Accent wanted</b> only when
+  that differs: ElevenLabs is then asked to put it on, which never sounds as good as a native voice.</p>
 <div class="table-wrap">
 <table class="voices">
-  <thead><tr><th>Character</th><th>Voice</th><th>Voice ID</th><th>Accent</th><th>Effect</th><th class="num">Speed</th><th>Note</th><th></th></tr></thead>
+  <thead><tr><th>Character</th><th>Voice</th><th>Voice ID</th><th>Own accent</th><th>Accent wanted</th><th>Effect</th><th class="num">Speed</th><th>Note</th><th></th></tr></thead>
   <tbody>
   {% for v in voices %}
     {% set f = 'v' ~ loop.index %}
@@ -22,7 +23,8 @@
       </td>
       <td><input form="{{ f }}" type="text" name="voice_name" value="{{ v.voice_name }}" placeholder="name"></td>
       <td><input form="{{ f }}" type="text" name="voice" value="{{ v.voice }}" required spellcheck="false" class="mono"></td>
-      <td><input form="{{ f }}" type="text" name="accent" value="{{ v.accent }}" placeholder="native" list="accents"></td>
+      <td>{% if v.native_accent %}{{ v.native_accent|capitalize }}{% elif v.native_accent == '' %}<span class="hint">none given</span>{% else %}<span class="hint">unknown</span>{% endif %}</td>
+      <td><input form="{{ f }}" type="text" name="accent" value="{{ v.accent }}" placeholder="its own" list="accents"></td>
       <td><select form="{{ f }}" name="fx">
         {% for fx in ['', 'robot', 'radio'] %}<option value="{{ fx }}" {{ 'selected' if fx == v.fx }}>{{ fx or 'none' }}</option>{% endfor %}
       </select></td>
@@ -45,7 +47,8 @@
         <input form="vnew" type="text" name="name" placeholder="Add a character" required></td>
       <td><input form="vnew" type="text" name="voice_name" placeholder="name"></td>
       <td><input form="vnew" type="text" name="voice" placeholder="voice ID" required spellcheck="false" class="mono"></td>
-      <td><input form="vnew" type="text" name="accent" placeholder="native" list="accents"></td>
+      <td class="hint">looked up on save</td>
+      <td><input form="vnew" type="text" name="accent" placeholder="its own" list="accents"></td>
       <td><select form="vnew" name="fx"><option value="">none</option><option>robot</option><option>radio</option></select></td>
       <td class="num"><input form="vnew" type="number" name="speed" value="1.0" step="0.05" min="0.7" max="1.2"></td>
       <td><input form="vnew" type="text" name="note"></td>
@@ -63,19 +66,21 @@
   and to edit it.</p>
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Character</th><th>Voice</th><th>Accent</th><th>Effect</th><th></th></tr></thead>
+  <thead><tr><th>Character</th><th>Voice</th><th>Own accent</th><th>Accent wanted</th><th>Effect</th><th></th></tr></thead>
   <tbody>
   {% for a in assigned %}
     <tr>
       <td>{{ a.name }}</td>
       <td>{{ a.voice_name or '' }} <code class="hint">{{ a.voice }}</code></td>
-      <td>{{ a.for_accent or '' }}{% if a.for_accent and not a.native_accent %} <span class="hint">(tag)</span>{% endif %}</td>
+      <td>{{ (a.native_accent or '')|capitalize }}</td>
+      <td>{{ a.for_accent or '' }}{% if a.for_accent and not a.native_accent %} <span class="hint">(by tag)</span>{% endif %}</td>
       <td>{{ a.fx or '' }}</td>
       <td class="num">
         <form class="inline" method="post" action="/voices/character">
           <input type="hidden" name="name" value="{{ a.name|title }}"><input type="hidden" name="voice" value="{{ a.voice }}">
           <input type="hidden" name="voice_name" value="{{ a.voice_name or '' }}"><input type="hidden" name="fx" value="{{ a.fx or '' }}">
           <input type="hidden" name="accent" value="{{ '' if a.native_accent else (a.for_accent or '') }}">
+          {% if a.native_accent %}<input type="hidden" name="native_accent" value="{{ a.native_accent }}">{% endif %}
           <button class="small">Keep</button>
         </form>
         <a class="btn small" href="/voices?name={{ (a.name|title)|urlencode }}#find">Find…</a>

@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS voices (
     name       TEXT PRIMARY KEY COLLATE NOCASE,  -- a character, or "Narrator" for the series narrator
     voice      TEXT NOT NULL,                    -- ElevenLabs voice id
     voice_name TEXT NOT NULL DEFAULT '',
-    accent     TEXT NOT NULL DEFAULT '',         -- only for a voice that isn't natively that accent (adds a tag)
+    accent     TEXT NOT NULL DEFAULT '',         -- the accent wanted; a tag asks for it if the voice's own differs
+    native_accent TEXT,                          -- the voice's own accent per ElevenLabs; '' = none given, NULL = not looked up
     fx         TEXT NOT NULL DEFAULT '',         -- robot, radio or ''
     speed      REAL NOT NULL DEFAULT 1.0,
     note       TEXT NOT NULL DEFAULT '',
@@ -100,6 +101,8 @@ class DB:
         with self.conn() as c:
             self._migrate(c)
             c.executescript(SCHEMA)
+            if "native_accent" not in [r[1] for r in c.execute("PRAGMA table_info(voices)")]:
+                c.execute("ALTER TABLE voices ADD COLUMN native_accent TEXT")
 
     @staticmethod
     def _migrate(c):
@@ -333,15 +336,21 @@ class DB:
         with self.conn() as c:
             return [dict(r) for r in c.execute("SELECT * FROM voices ORDER BY name = 'Narrator' DESC, name")]
 
-    def set_voice(self, name: str, voice: str, voice_name="", accent="", fx="", speed=1.0, note="", rename_from=""):
+    def set_voice(self, name: str, voice: str, voice_name="", accent="", fx="", speed=1.0, note="", rename_from="",
+                  native_accent=None):
         with self.conn() as c:
             if rename_from and rename_from.lower() != name.lower():
                 c.execute("DELETE FROM voices WHERE name = ?", (rename_from,))
-            c.execute("INSERT INTO voices (name, voice, voice_name, accent, fx, speed, note, updated) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET name = excluded.name, "
+            c.execute("INSERT INTO voices (name, voice, voice_name, accent, fx, speed, note, native_accent, updated) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET name = excluded.name, "
                       "voice = excluded.voice, voice_name = excluded.voice_name, accent = excluded.accent, "
-                      "fx = excluded.fx, speed = excluded.speed, note = excluded.note, updated = excluded.updated",
-                      (name, voice, voice_name, accent, fx, speed, note, time.time()))
+                      "fx = excluded.fx, speed = excluded.speed, note = excluded.note, "
+                      "native_accent = excluded.native_accent, updated = excluded.updated",
+                      (name, voice, voice_name, accent, fx, speed, note, native_accent, time.time()))
+
+    def set_native_accent(self, name: str, native_accent: str):
+        with self.conn() as c:
+            c.execute("UPDATE voices SET native_accent = ? WHERE name = ?", (native_accent, name))
 
     def delete_voice(self, name: str):
         with self.conn() as c:

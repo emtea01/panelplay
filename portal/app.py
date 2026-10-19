@@ -320,6 +320,7 @@ def cancel(job_id: int):
 @app.get("/voices", response_class=HTMLResponse)
 def voices_page(request: Request, name: str = ""):
     s = S.current(db)
+    cast.fill_native_accents(db, s)
     cast_names = {v["name"].lower() for v in db.voices()}
     return _render_page(request, "voices.html", voices=db.voices(), pronunciations=db.pronunciations(),
                         assigned=[a for a in cast.assigned(s) if a["name"].lower() not in cast_names],
@@ -329,14 +330,17 @@ def voices_page(request: Request, name: str = ""):
 @app.post("/voices/character")
 def save_voice(name: str = Form(...), voice: str = Form(...), voice_name: str = Form(""), accent: str = Form(""),
                fx: str = Form(""), speed: float = Form(1.0), note: str = Form(""), rename_from: str = Form(""),
-               voice_only: str = Form("")):
+               voice_only: str = Form(""), native_accent: str = Form(None)):
     if fx not in ("", "robot", "radio"):
         raise HTTPException(400)
     old = next((v for v in db.voices() if v["name"].lower() == name.strip().lower()), None)
     if voice_only and old:  # a voice picked in the finder: keep the character's accent, effect and speed
         name, accent, fx, speed, note = old["name"], old["accent"], old["fx"], old["speed"], old["note"]
+    if native_accent is None:  # not given by the finder or Keep: keep what we know, or look it up
+        native_accent = (old["native_accent"] if old and old["voice"] == voice.strip()
+                         else cast.native_accent(S.current(db), voice.strip(), voice_name.strip()))
     db.set_voice(name.strip(), voice.strip(), voice_name.strip(), accent.strip(), fx, speed, note.strip(),
-                 rename_from.strip())
+                 rename_from.strip(), native_accent.lower() if native_accent is not None else None)
     return RedirectResponse("/voices#cast", status_code=303)
 
 
